@@ -1,0 +1,72 @@
+                            -- Kriya : Toy Fr-En Dataset --
+
+Kriya is an implementation of Hierarchical Phrase-based (Chiang 2007) machine translation 
+system mostly written in Python. Kriya includes both SCFG rule extraction part as well as
+the chart-parsing decoder.
+
+This directory contains a toy corpus and a customized config file for running the training
+step quickly. The toy corpus comes from the WMT10 shared task and has about 100,000 sentences
+from news corpus for training.
+
+Requirements:
+=============
+To train the toy system you need the following, which you can check-out from svn:
+* Kriya Phrase-extractor
+* Kriya Decoder
+* Toy corpus (this directory)
+
+How to train the Toy System?
+============================
+The training script has been streamlined and customized to be executed on the high-performance 
+computing clusters. To train the system please follow the steps below:
+
+1. Modify the toy.fr-en.config to give the correct path of the toy corpus and Kriya source files.
+   In all, you need to modify the params: KRIYA_MODELS, KRIYA_PXTR, KRIYA_DEC, {TRAIN|DEV|TEST}_DIR
+2. The model is trained in two steps. First step does the corpus pre-processing and runs Moses 
+   training up to step 5.
+   
+   This step takes about 1 hour to complete for this toy corpus and expects both Giza and Moses
+   modules (if you have modules environment) to be loaded. Otherwise, specify the path for the environment
+   variables such as GIZA_DIR, MOSES_DIR and SCRIPTS_ROOTDIR (similar to training in Moses)
+
+   Assuming $Kriya_phrxtr pointing to the top-level directory of Kriya phrase extractor, run
+   > perl $Kriya_phrxtr/training-scripts/phr_xtrct.pl toy.fr-en.config
+
+3. The second step, extracts the initial phrases and generates Kriya models. This can be launched 
+   by the command:
+   > perl $Kriya_phrxtr/training-scripts/scfg_xtrct.pl toy.fr-en.config
+
+   The training process may take about 3 hrs to complete and the trained models (filtered for the
+   tuning and test sets) can be found in the 'models/' sub-directory.
+
+4. The 'tuning/' sub-directory contains the config file for the decoder, glue rules file and also
+   a script for running MERT using Moses Mert (automatic script creation for zMERT will be available 
+   soon). The tuning can be launched from the training directory by the following command:
+   > tuning/run_mert.kriya.sh
+
+   The tuning step should be submitted to the cluster as a separate job or can be run directly on 
+   a cluster node in an interactive session. This will tune the development set using Moses MERT and
+   will decode the test set using the MERT optimized weights.
+
+How to tune for weights?
+========================
+The weights can be tuned by Minimum Error Rate Training (MERT) algorithm (Och 2003) or by PRO (Hopkins and May, 2011) 
+for a development set. The former requires MOSES to be installed as it uses the mert optimizer in it, while the later is
+implemented in Kriya. The training process automatically creates a script for running MERT under the top-level directory.
+It can be directly submmitted as a job to a HPC cluster using the command:
+
+> qsub -l mem=3gb,walltime=24:00:00 run_pro.kriya.sh    (for PRO)
+> qsub -l mem=3gb,walltime=24:00:00 run_mert.kriya.sh   (for MERT)
+
+The MERT will use the directory 'tuning/mert-kriya' during the tuning step and will decode the testset,
+using the optimal weights found by the MERT step. The output of the testset sentences will be stored 
+under 'tuning/mert-kriya/testset-decode'.
+
+
+---
+
+If you have questions or suggestions please contact:
+
+- Baskaran (baskaran -at- cs -dot- sfu -dot- ca)
+December 2012
+

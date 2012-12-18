@@ -1,0 +1,18 @@
+                            -- Python Wrapper for SRILM --
+
+Kriya supports KenLM (Heafield, 2011) for LM integration in the decoder. While a basic version of 
+LM integration also supports SRILM (http://www.speech.sri.com/projects/srilm/), the more 
+sophisticated approach that considers the edges in computing a better heuristic is supported only 
+for KenLM (see Sankaran et al. 2012 for details). We encourage the user to use KenLM version
+that gives a slightly better BLEU score.
+
+As for the Python wrapper for SRILM, we built one using Nitin Madnani's tool. While we modified it 
+a bit, we are in the process of verifying if we could distribute it or the .so file as part of Kriya.
+
+In the meanwhile if you prefer to use SRILM instead of KenLM, please download and build it from here:
+http://www.desilinguist.org/software/swig-srilm.tar.gz
+
+Set the environment variable NGRAM_SWIG_SRILM to the one having _srilm.so and srilm.py files.
+Then comment out/remove the lines 94-98 in Kriya-Decoder/settings.py. Set 'use-srilm=True' in decoder 
+config file.
+

@@ -1,1 +1,56 @@
-To come soon ...
+                                            == Kriya - README ==
+
+Kriya:
+------
+Kriya is an implementation of hierarchical phrase-based translation model. It is implemented in Python (2.6 or 2.7) and includes
+Hiero-style grammar extractor as well as decoder.
+
+
+Environment variables:
+----------------------
+Kriya expects the following special environment variable to be set.
+
+KRIYA_DIR       - Top-level directory leading to phrase-extractor and decoder (eg. '/users/baskaran/Research/git/Kriya')
+
+The following environment variables are required during training process:
+
+GIZA_DIR        - Directory containing the Giza++ binaries
+MOSES_DIR       - Moses bin directory containing executables such as extract (used for extracting phrase alignments)
+SCRIPTS_ROOTDIR - Scripts directory of the Moses installation (required for running training steps)
+
+The Kriya tuning script expects the following environment variables to be set for the decoding/tuning steps.
+
+NGRAM_SWIG_KENLM    - Path to the Python wrapper for KenLM (eg. '$KRIYA_DIR/Kriya-Decoder/wrapper-kenlm')
+NGRAM_SWIG_SRILM    - Path to the Python wrapper for SRILM (eg. '$KRIYA_DIR/Kriya-Decoder/wrapper-srilm')
+
+MEGAM_DIR           - Path containing megam binary (required for PRO tuning)
+SVMRANK_DIR         - Path containing svmrank binary (required for PRO tuning)
+TER_JAR             - Full path of the tercom jar file (reqd. by PRO for tuning with TER)
+METEOR_JAR          - Full path of the meteor jar file (reqd. by PRO for tuning with METEOR)
+
+JAVA_HOME           - Expects to find java under $JAVA_HOME/bin (required by PRO for tuning w/ METEOR & TER)
+PL_HOME             - Expects to find perl under $PL_HOME/bin
+PY3_HOME            - Expects to find Python-3 under $PY3_HOME/bin (required by PRO for tuning with RIBES metric)
+
+
+Acknowledgements:
+-----------------
+* The perl scripts that are concerned with the tuning step are originally from the corresponding Moses scripts. We modified them
+    for Kriya to support the generic high-performance clusters and also extended the script to support tuning with PRO.
+
+* The script for computing BLEU score is taken from MOSES (multi-bleu.perl) with minor modifications. We modified this separately
+    to compute sentence-level BLEU (BLEU+1) scores (multi-sent-bleu.perl) as explained in Lin and Och (2004). 
+
+* RIBES (Isozaki etal., 2010) evaluation metric was conceived and implemented by the research group in NTT in Japan. The script
+    for computing RIBES scores (for tuning and evaluation) is obtained from http://www.kecl.ntt.co.jp/icl/lirg/ribes/ and is
+    distributed with Kriya 'as is'.
+
+
+Questions?
+----------
+We realize that the documentation for Kriya is far from complete and we'll be glad to answer questions if you need some help.
+Drop a mail to: baskaran -at- cs -dot- sfu -dot- ca
+
+---
+Baskaran Sankaran
+Natlang Lab, SFU.

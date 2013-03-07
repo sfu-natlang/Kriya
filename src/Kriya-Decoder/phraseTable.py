@@ -6,13 +6,10 @@ import sys
 import time
 
 import settings
-from entry_CP import Entry
+from hypothesis import Hypothesis
 from myTrie import SimpleSuffixTree
-from lmKENLM import KENLangModel
-from lmSRILM import SRILangModel
 from refPhrases import RefPhrases
-
-featVec = []
+from ruleItem import RuleItem
 
 class PhraseTable(object):
     '''Phrase table class for containing the SCFG rules and serving associated queries'''
@@ -20,19 +17,13 @@ class PhraseTable(object):
     tot_rule_pairs = 0
     src_trie = None
     ruleDict = {}
-    __slots__ = "wVec", "ttl", "pp_val", "log_normalizer"
+    __slots__ = "ttl"
 
     def __init__(self):
         '''Loading rules from the phrase table and initializing their feature values'''
 
         from settings import feat
-        self.wVec = feat
         self.ttl = settings.opts.ttl
-        self.pp_val = math.log(2.718)
-        self.log_normalizer = 0.434294
-
-        tm_wgts_str = ' '.join( [str(x) for x in self.wVec.tm] )
-        sys.stderr.write( "Weights are : [%s] %g %g %g\n" % (tm_wgts_str, self.wVec.wp, self.wVec.glue, self.wVec.lm) )
 
         self.loadRules()
         self.loadGlueRules()
@@ -44,10 +35,8 @@ class PhraseTable(object):
     def loadRules(self):
         '''Loads the filtered rules and filters them further by using the Suffix Tree of test data'''
 
-        global featVec
         PhraseTable.tot_rule_pairs = 0
         prev_src = ''
-        featVec = [0.0, 0.0, 0.0, 0.0, self.pp_val, 0.0, 0.0, 0.0]
         uniq_src_rules = 0
         entriesLst = []
 
@@ -71,43 +60,30 @@ class PhraseTable(object):
                     else:
                         PhraseTable.src_trie.addText(src)
 
-                self.buildFeatVec(probs, tgt)
-
                 if len(prev_src) > 0 and prev_src != src:
                     entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
                     PhraseTable.ruleDict[prev_src] = []
                     tgt_options = 0
-                    for pt_item_obj in entriesLst:
-                        entry_obj = pt_item_obj.entry_item
-                        p_score = (self.wVec.tm[0] * entry_obj.featVec[0]) + (self.wVec.tm[1] * entry_obj.featVec[1]) + \
-                                    (self.wVec.tm[2] * entry_obj.featVec[2]) + (self.wVec.tm[3] * entry_obj.featVec[3]) + \
-                                    (self.wVec.tm[4] * entry_obj.featVec[4])+ (self.wVec.wp * entry_obj.featVec[5]) + \
-                                    (self.wVec.glue * entry_obj.featVec[7])
-                        lm_score = self.wVec.lm * self.getLMHeuScore(entry_obj.tgt)
-                        entry_obj.lm_heu = lm_score
-                        entry_obj.score = p_score + lm_score
-                        PhraseTable.ruleDict[prev_src].append( entry_obj )
+                    for trans_option in entriesLst:
+                        rule_obj = trans_option.rule
+                        rule_obj.scoreRule()
+                        PhraseTable.ruleDict[prev_src].append( rule_obj )
                         tgt_options += 1
                         if(self.ttl > 0 and tgt_options >= self.ttl): break
                     del entriesLst[:]
 
-                entriesLst.append( PTableItem(featVec[2], Entry(0.0, 0.0, src, tgt, featVec, tgt)) )
+                rule = RuleItem.initRule(src, tgt, probs)
+                entriesLst.append( TransOption(rule.getScore4TTL(), rule) )
                 prev_src = src
 
             # Handle the last rule
             entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
             PhraseTable.ruleDict[prev_src] = []
             tgt_options = 0
-            for pt_item_obj in entriesLst:
-                entry_obj = pt_item_obj.entry_item
-                p_score = (self.wVec.tm[0] * entry_obj.featVec[0]) + (self.wVec.tm[1] * entry_obj.featVec[1]) + \
-                            (self.wVec.tm[2] * entry_obj.featVec[2]) + (self.wVec.tm[3] * entry_obj.featVec[3]) + \
-                            (self.wVec.tm[4] * entry_obj.featVec[4])+ (self.wVec.wp * entry_obj.featVec[5]) + \
-                            (self.wVec.glue * entry_obj.featVec[7])
-                lm_score = self.wVec.lm * self.getLMHeuScore(entry_obj.tgt)
-                entry_obj.lm_heu = lm_score
-                entry_obj.score = p_score + lm_score
-                PhraseTable.ruleDict[prev_src].append( entry_obj )
+            for trans_option in entriesLst:
+                rule_obj = trans_option.rule
+                rule_obj.scoreRule()
+                PhraseTable.ruleDict[prev_src].append( rule_obj )
                 tgt_options += 1
                 if(self.ttl > 0 and tgt_options >= self.ttl): break
             del entriesLst[:]
@@ -120,39 +96,6 @@ class PhraseTable(object):
             sys.stderr.write( "Time taken for loading rules in dict and Trie : %1.3f sec\n\n" % (t_end - t_beg) )
 
         return None
-
-    def buildFeatVec(self, probs, tgt_rule):
-        '''Build the feature vector from a string of probs and add to it phrase & word penalty and glue score'''
-
-        # All feature values must be represented as log-probs in base 'e'
-        # Any log-prob in base '10' must be converted to base 'e' by dividing it by math.log10(math.exp(1)) i.e 0.434294
-        global featVec
-        term_count = 0
-
-        # add the TM features
-        featVec = [float(x) for x in probs.split()]                              # For using Kriya PT (for base-e log probs)
-        #featVec = [float(x) / self.log_normalizer for x in probs.split()]        # For using Kriya PT (for base-10 log probs)
-
-        #i = 0
-        #for prob in probs.split():                                               # For using Moses phrase table
-        #    if i < 4: featVec.append( math.log(float(prob)) )                    # probabilities are actual, so take log
-        #    i += 1
-
-        # add phrase penalty and word penalty to the featVec
-        for tgt_term in tgt_rule.split():
-            if tgt_term == 'X__1' or tgt_term == 'X__2': continue
-            term_count += 1
-        featVec += [self.pp_val, -term_count, 0.0, 0.0]
-
-    def getLMHeuScore(self, tgt_rule):
-        ''' Compute the LM Heuristic score for the target phrase '''
-
-        lm_H = 0.0
-        for tgt_term in tgt_rule.split():
-            if tgt_term != 'X__1' and tgt_term != 'X__2':
-                if settings.opts.use_srilm: lm_H += SRILangModel.queryLMlog10(tgt_term, 1)  # for SRILM wrapper
-                else: lm_H += KENLangModel.queryLMlog10(tgt_term, 1)  # for KENLM wrapper
-        return lm_H / self.log_normalizer
 
     def loadGlueRules(self):
         '''Loads the glue rules along with their feature values'''
@@ -167,16 +110,13 @@ class PhraseTable(object):
                 line = glueItems[0].strip()
 
                 (src, tgt, probs) = line.split(' ||| ')
-                featVec = [float(x) for x in probs.split()]
+                rule_obj = RuleItem.initGlue(src, tgt, probs)
                 if (settings.opts.no_glue_penalty and src == 'S__1 X__2'):
-                    featVec[7] = 0.0
-                lm_score = self.wVec.lm * featVec[6]
-                p_score = (self.wVec.tm[0] * featVec[0]) + (self.wVec.tm[1] * featVec[1]) + \
-                            (self.wVec.tm[2] * featVec[2]) + (self.wVec.tm[3] * featVec[3]) + \
-                            (self.wVec.tm[4] * featVec[4]) + (self.wVec.wp * featVec[5]) + \
-                            lm_score + (self.wVec.glue * featVec[7])
+                    rule_obj.turnOffGlue()
+
+                rule_obj.scoreRule()
                 PhraseTable.ruleDict[src] = []
-                PhraseTable.ruleDict[src].append( Entry(p_score, lm_score, src, tgt, featVec, tgt) )
+                PhraseTable.ruleDict[src].append( rule_obj )
         finally:
             gF.close()
 
@@ -245,9 +185,9 @@ class PhraseTable(object):
             return cls.ruleDict[src_phr]
 
     @classmethod
-    def addUNKRule(cls, src_phr, entry_obj):
+    def addUNKRule(cls, src_phr, rule_obj):
         cls.ruleDict[src_phr] = []
-        cls.ruleDict[src_phr].append( entry_obj )
+        cls.ruleDict[src_phr].append( rule_obj )
 
     @classmethod
     def findConsistentRules(cls, src_span):
@@ -258,12 +198,12 @@ class PhraseTable(object):
         return cls.tot_rule_pairs
 
 
-class PTableItem(object):
-    '''Phrase table item class for temporarily handling  SCFG rules and serving associated queries'''
+class TransOption(object):
+    '''Translation option class for storing the rule and its p(e|f) probability'''
 
-    __slots__ = "prob_e_f", "entry_item"
+    __slots__ = "prob_e_f", "rule"
 
-    def __init__(self, p_ef, e_obj):
+    def __init__(self, p_ef, r_obj):
         self.prob_e_f = p_ef
-        self.entry_item = e_obj
+        self.rule = r_obj
 

@@ -8,8 +8,6 @@ import time
 import settings
 from parse_CP import Parse
 from phraseTable import PhraseTable
-from lmKENLM import KENLangModel
-from lmSRILM import SRILangModel
 from refPhrases import RefPhrases
 
 def readNParse(sent_count):
@@ -121,21 +119,12 @@ def main():
     global refFiles
     sent_count = settings.opts.sentindex * settings.opts.sent_per_file
 
-    sys.stderr.write( "Loading LM file %s ... \n" % (settings.opts.lmFile) )
-    t_beg = time.time()
-    if settings.opts.use_srilm: lm_obj = SRILangModel(settings.opts.n_gram_size, settings.opts.lmFile, settings.opts.elider)
-    else: lm_obj = KENLangModel(settings.opts.n_gram_size, settings.opts.lmFile, settings.opts.elider)
-    t_end = time.time()
-    sys.stderr.write( "Time taken for loading LM        : %1.3f sec\n\n" % (t_end - t_beg) )
-
     if settings.opts.force_decode:
         getRefFiles()
         RefPhrases(sent_count, refFiles)
     PhraseTable()
 
     readNParse(sent_count)                      # Parse the sentences
-
-    lm_obj = ''                                 # Calls the __del__ in {SRI/KEN}LangModel to free the LM variable
 
     #if settings.opts.trace_rules > 0:
     #    consolidateRules(settings.opts.outFile+".trace")

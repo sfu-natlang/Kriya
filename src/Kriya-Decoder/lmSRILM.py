@@ -13,67 +13,60 @@ from srilm import *
 class SRILangModel(object):
     '''Language Model class for SRILM'''
 
-    LM = None                                       # Class attribute containing LM
-    lm_order = None                                 # Class attribute for lm_order
     log_normalizer = 0.434294                       # Normalizer to convert the log-10 value (of SRILM) to natural log
-    elider = ''
-    __slots__ = ()
+
+    __slots__ = "LM", "lm_order", "elider"
 
     def __init__(self, lm_order, lmFile, elider_str):
         '''Import the SRILM wrapper module and initialize LM'''
 
-        SRILangModel.lm_order = lm_order
-        SRILangModel.LM = initLM(lm_order)          # Initialize a LM variable (of size lm_order)
-        SRILangModel.elider = elider_str
+        self.lm_order = lm_order
+        self.LM = initLM(lm_order)                  # Initialize a LM variable (of size lm_order)
+        self.elider = elider_str
         self.loadLM(lmFile)
 
     def __del__(self):
         '''Deletes the LM variable'''
 
-        deleteLM(SRILangModel.LM)
+        deleteLM(self.LM)
 
     def loadLM(self, lmFile):
         '''Function for loading the LM'''
 
-        readLM(SRILangModel.LM, lmFile)             # Read lmFile into LM variable
+        readLM(self.LM, lmFile)
 
     ## Functions for querying the LM
     ## Define them as classmethods so that they can be called directly with class
-    @classmethod
-    def queryLM(cls, phr, phr_len):
+    def queryLM(self, phr, phr_len):
         '''Score a target phrase with the Language Model and return natural log'''
 
-        return getNGramProb(cls.LM, phr, phr_len) / cls.log_normalizer
+        return getNGramProb(self.LM, phr, phr_len) / SRILangModel.log_normalizer
 
-    @classmethod
-    def queryLMlog10(cls, phr, phr_len):
+    def queryLMlog10(self, phr, phr_len):
         '''Score a target phrase with the Language Model and return base-10 log'''
 
-        return getNGramProb(cls.LM, phr, phr_len)
+        return getNGramProb(self.LM, phr, phr_len)
 
-    @classmethod
-    def calcUNKLMScore(cls, sent):
+    def calcUNKLMScore(self, sent):
         '''Calculate the LM score contribution by UNK (OOV) words'''
 
         sent_len = len( sent.split() )
-        return scoreUNK(cls.LM, sent, sent_len) / cls.log_normalizer
+        return scoreUNK(self.LM, sent, sent_len) / SRILangModel.log_normalizer
 
-    @classmethod
-    def scorePhrnElide(cls, wordsLst, phr_len, mgramSpans):
+    def scorePhrnElide(self, wordsLst, phr_len, mgramSpans):
         '''Score all the complete m-grams in a given target phrase'''
 
         lm_temp = 0.0
         for (mgram_beg, mgram_end) in mgramSpans:
-            for i in range( mgram_beg, mgram_end - (cls.lm_order - 1) ):
-                lm_temp += getNGramProb(cls.LM, ' '.join( wordsLst[i:i+cls.lm_order] ), cls.lm_order)
+            for i in range( mgram_beg, mgram_end - (self.lm_order - 1) ):
+                lm_temp += getNGramProb(self.LM, ' '.join( wordsLst[i:i+self.lm_order] ), self.lm_order)
 
         # Elide the string again
-        e_tgt = ' '.join(wordsLst[0:cls.lm_order-1] + [cls.elider] + wordsLst[phr_len-(cls.lm_order-1):])
+        e_tgt = ' '.join(wordsLst[0:self.lm_order-1] + [self.elider] + wordsLst[phr_len-(self.lm_order-1):])
 
-        return (lm_temp / cls.log_normalizer, e_tgt)
+        return (lm_temp / SRILangModel.log_normalizer, e_tgt)
 
-    @classmethod
-    def getLMHeuCost(cls, wordsLst, phr_len):
+    def getLMHeuCost(self, wordsLst, phr_len):
         """ Compute Heuristic LM score for a given candidate.
 
             Heuristic LM score is calculated for m-1 words in the beginning and end
@@ -85,8 +78,8 @@ class SRILangModel(object):
         """
 
         lmHueLst = [0.0, 0.0, 0.0]
-        if (phr_len < cls.lm_order): initWrds = wordsLst
-        else: initWrds = wordsLst[0:cls.lm_order-1]
+        if (phr_len < self.lm_order): initWrds = wordsLst
+        else: initWrds = wordsLst[0:self.lm_order-1]
 
         # Compute LM heuristic score for the first m-1 words
         if (wordsLst[0] == "<s>"):
@@ -98,17 +91,17 @@ class SRILangModel(object):
         part_lm_w_edge = 0.0
         part_lm_wo_edge = 0.0
         for i in range( 1, len(initWrds) ):
-            part_lm_w_edge += getNGramProb( cls.LM, ' '.join( initWrds[:(i+1)] ), i + 1 )
+            part_lm_w_edge += getNGramProb( self.LM, ' '.join( initWrds[:(i+1)] ), i + 1 )
             if (is_S_rule):
                 pass
             else:
-                part_lm_wo_edge += getNGramProb( cls.LM, ' '.join( initWrds[1:(i+1)] ), i )
+                part_lm_wo_edge += getNGramProb( self.LM, ' '.join( initWrds[1:(i+1)] ), i )
 
-        lm_heu_w_edge = part_lm_w_edge / cls.log_normalizer
+        lm_heu_w_edge = part_lm_w_edge / SRILangModel.log_normalizer
         if (is_S_rule):
             lm_heu_wo_edge = lm_heu_w_edge
         else:
-            lm_heu_wo_edge = part_lm_wo_edge / cls.log_normalizer
+            lm_heu_wo_edge = part_lm_wo_edge / SRILangModel.log_normalizer
 
         lmHueLst[1] += lm_heu_w_edge
         lmHueLst[0] += lm_heu_wo_edge
@@ -117,12 +110,11 @@ class SRILangModel(object):
         # Compute LM heuristic score for the last m-1 words
         last_indx = phr_len - 1
         if (not is_S_rule and wordsLst[last_indx] != "</s>"):
-            if last_indx <= cls.lm_order - 1: phr_beg_indx = 1
-            else: phr_beg_indx = last_indx - cls.lm_order + 2
+            if last_indx <= self.lm_order - 1: phr_beg_indx = 1
+            else: phr_beg_indx = last_indx - self.lm_order + 2
 
             phr_end = ' '.join( wordsLst[phr_beg_indx:] ) + " </s>"
             phr_end_len = last_indx - phr_beg_indx + 2
-            lmHueLst[2] += ( getNGramProb( cls.LM, phr_end, phr_end_len ) / cls.log_normalizer )
+            lmHueLst[2] += ( getNGramProb( self.LM, phr_end, phr_end_len ) / SRILangModel.log_normalizer )
 
         return max(lmHueLst)                                        # Return the max value of LM heu
-

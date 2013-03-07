@@ -4,9 +4,11 @@ import sys
 
 import settings
 from cell import Cell
-from entry_CP import Entry
+from hypothesis import Hypothesis
+from featureManager import FeatureManager
 from lazyMerge_CP import Lazy
 from phraseTable import PhraseTable
+from ruleItem import RuleItem
 
 # Global variables
 consObjsLst = []                # List of consequent-rule objects for a particular cell
@@ -57,12 +59,13 @@ class Parse(object):
 
             # if the word is UNK; add it to ruleDict as: X -> <w_i, w_i> with default prob
             if not PhraseTable.hasRule(p_word):
-                (unk_score, unk_lm_heu, unk_featVec) = settings.opts.U_lpTup
-                PhraseTable.addUNKRule( p_word, Entry(unk_score, unk_lm_heu, p_word, p_word, unk_featVec[:], p_word) )
+                (unk_score, unk_lm_heu, unk_featVec) = FeatureManager.unkRuleTup
+                #PhraseTable.addUNKRule( p_word, Hypothesis(unk_score, unk_lm_heu, p_word, p_word, unk_featVec[:], p_word) )
+                PhraseTable.addUNKRule( p_word, RuleItem.initUNKRule(p_word, unk_featVec, unk_score, unk_lm_heu) )
 
             # Known (X -> <w_i, w_t>) or unknown (X -> <w_i, w_i>) rules are now flushed to the chart
             self.__flush2Cell( (p_i, p_i), ('X', p_word), 0, self.__getRulesFromPT(p_word, (p_i, p_i)) )     # Flush the entries to the cell
-            #if p_i == 0: Parse.chartDict[(p_i, p_i)].printCell('X', self.sent_indx)
+            #Parse.chartDict[(p_i, p_i)].printCell('X', self.sent_indx)
 
             # Add the glue rule S --> <X__1, X__1> in cell (0, 0)
             if p_i == 0:
@@ -117,7 +120,7 @@ class Parse(object):
                         if final_cell and not force_dec_status:
                             sys.stderr.write("           INFO  :: Force decode mode: No matching candidate found for cell (0, %d). Aborting!!\n" % (p_j))
                             return 0
-                        #Parse.chartDict[(p_i, p_j)].printCell('S', self.sent_indx)
+                    #Parse.chartDict[(p_i, p_j)].printCell('S', self.sent_indx)
 
         p_j = self.sent_len - 1
         if not Parse.chartDict[(0, p_j)].has_S_tree:
@@ -262,9 +265,8 @@ class Parse(object):
 
         tgtLst = PhraseTable.getRuleEntries(s_rule, self.sent_indx)
         newTgtLst = []
-        for rule_entry in tgtLst:
-            new_entry = Entry(0.0, 0.0, '','', [], '')
-            new_entry = Entry.copyEntry(rule_entry, new_entry, span)
+        for r_item in tgtLst:
+            new_entry = Hypothesis.createFromRule(r_item, span)
             newTgtLst.append(new_entry)
 
         return newTgtLst

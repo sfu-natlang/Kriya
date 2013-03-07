@@ -4,9 +4,9 @@
 import heapq
 from operator import attrgetter
 
-from entry_CP import Entry    # used for debugging
-from lmKENLM import KENLangModel
-from lmSRILM import SRILangModel
+from featureManager import FeatureManager
+from languageModelManager import LanguageModelManager
+from hypothesis import Hypothesis    # used for debugging
 from refPhrases import RefPhrases
 import settings
 
@@ -17,7 +17,6 @@ class Lazy(object):
     cell_span = None
     cell_type = None
     is_last_cell = None
-    wvec_lm = None
     refsLst = []
     hypScoreDict = {}
     __slots__ = "cubeDict", "bsize", "coverageHeap", "coverageDict", "cbp_diversity"
@@ -34,7 +33,6 @@ class Lazy(object):
         Lazy.cell_span = c_span
         Lazy.cell_type = c_type
         Lazy.is_last_cell = final_cell
-        Lazy.wvec_lm = settings.feat.lm
         Lazy.refsLst = []
         Lazy.createTracker();        # creates the tracking dict
 
@@ -89,9 +87,9 @@ class Lazy(object):
             # push the best item into coverageHeap from which the N-best list will be extracted
             if mP_entry_obj is not None:
                 # @type mP_entry_obj Entry
-                entry_exists = Lazy.indexHypothesis(mP_entry_obj.tgt, Entry.getScoreSansLM(mP_entry_obj, Lazy.wvec_lm), h_indx)
+                entry_exists = Lazy.indexHypothesis(mP_entry_obj.tgt, Hypothesis.getScoreSansLM(mP_entry_obj), h_indx)
                 if (entry_exists is None or not settings.opts.use_unique_nbest):
-                    Entry.setInfCell(mP_entry_obj, Lazy.cell_span)
+                    Hypothesis.setInfCell(mP_entry_obj, Lazy.cell_span)
                     if self.cbp_diversity > 0: self.recordDiversity(cube_indx)
                     heapq.heappush(self.coverageHeap, (h_score, h_indx, mP_entry_obj, cube_indx, mP_r))
                 elif entry_exists == -1:
@@ -122,11 +120,11 @@ class Lazy(object):
                         cb_pop_count += 1
                     elif settings.opts.use_unique_nbest:            # Better than existing hypothesis; copy LM info from existing hyp
                         curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Entry.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2], Lazy.wvec_lm)
+                        score_w_lmHeu = Hypothesis.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2])
                         new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
                     else:
                         curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Entry.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2], Lazy.wvec_lm)
+                        score_w_lmHeu = Hypothesis.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2])
                         new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
 
                 heapq.heappush(mP_candLst, new_candTup)
@@ -151,11 +149,11 @@ class Lazy(object):
                         new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
                     elif settings.opts.use_unique_nbest:            # Better than existing hypothesis; copy LM info from existing hyp
                         curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Entry.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2], Lazy.wvec_lm)
+                        score_w_lmHeu = Hypothesis.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2])
                         new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
                     else:
                         curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Entry.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2], Lazy.wvec_lm)
+                        score_w_lmHeu = Hypothesis.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2])
                         new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
 
                     heapq.heappush(self.coverageHeap, new_candTup)
@@ -400,7 +398,7 @@ class Cube(object):
             -1 : Hyp was seen earlier but current one has a better score; create a new entry to replace the existing one
              0 : Hyp was seen earlier and has a poor score than the existing one; ignore this
         """
-        score_wo_LM = score - (Lazy.wvec_lm * fVec[6])
+        score_wo_LM = score - LanguageModelManager.getLMScore(fVec)
         hyp_status = Lazy.getHypothesisStatus(cons_item.tgt, score_wo_LM)
 
         """ Should we recombine hypothesis?
@@ -410,44 +408,13 @@ class Cube(object):
             ii) use_unique_nbest is True and the new hyp is better than the existing one.
         """
         if ( hyp_status == -2 ):
-            (score, lm_heu, lm_lprob, e_tgt, out_state) = self.helperLM(score, cons_item)
-            fVec[6] += lm_lprob
-            entry_obj = Entry(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[0], entriesLst[1:], 0.0, out_state)
+            (score, lm_heu, fVec, e_tgt, out_state) = LanguageModelManager.helperLM(score, cons_item, Lazy.is_last_cell, fVec[:])
+            entry_obj = Hypothesis(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[0], entriesLst[1:], 0.0, out_state)
         elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):
             entry_obj = None
-        else: entry_obj = Entry(score, 0, self.src_side, cons_item.tgt, fVec, '', self.depth_hier, (), entriesLst[0], entriesLst[1:])
+        else: entry_obj = Hypothesis(score, 0, self.src_side, cons_item.tgt, fVec, '', self.depth_hier, (), entriesLst[0], entriesLst[1:])
 
         return (score, entry_obj)
-
-    def helperLM(self, score, cons_item):
-        '''Helper function for computing the two functions p() and q() and scoring'''
-
-        lm_lprob = 0.0
-        new_out_state = cons_item.r_lm_state
-
-        # Computing n-gram LM-score for partial candidate hypotheses
-        if cons_item.e_len < settings.opts.n_gram_size:
-            if settings.opts.use_srilm: lm_H = SRILangModel.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
-            else: lm_H = KENLangModel.getLMHeuCost(cons_item.e_tgt, cons_item.eTgtLst, cons_item.e_len)
-            e_tgt = cons_item.e_tgt
-        else:
-            # Compute the LM probabilities for all complete m-grams in the elided target string, and
-            # Compute heuristic prob for first m-1 terms in target
-            if settings.opts.use_srilm:
-                (lm_lprob, e_tgt) = SRILangModel.scorePhrnElide(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans)
-                lm_H = SRILangModel.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
-            else:
-                (lm_lprob, e_tgt, new_out_state) = KENLangModel.scorePhrnElide(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans, cons_item.statesLst, cons_item.r_lm_state)
-                lm_H = KENLangModel.getLMHeuCost(cons_item.e_tgt, cons_item.eTgtLst, cons_item.e_len)
-
-        if ( Lazy.is_last_cell ):                       # lm_heu is added permanently in the last cell
-            lm_lprob += lm_H
-            lm_H = 0.0
-
-        lm_heu = Lazy.wvec_lm * lm_H
-        score += lm_heu + (Lazy.wvec_lm * lm_lprob)     # Pruning score including LM and heuristic
-
-        return (score, lm_heu, lm_lprob, e_tgt, new_out_state)
 
 
 class ConsequentItem(object):

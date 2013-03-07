@@ -1,10 +1,10 @@
 
+import operator
 import sys
 
-import operator
+from featureManager import FeatureManager
+from hypothesis import Hypothesis
 import settings
-from entry_CP import Entry
-
 
 class Cell(object):
     '''Class for representing individual cells of the parse triangle'''
@@ -62,7 +62,7 @@ class Cell(object):
             cand_indx = 0
             for cand in self.table[key][:]:
                 matches_ref = False
-                cand_tgt = Entry.getHypothesis(cand)
+                cand_tgt = Hypothesis.getHypothesis(cand)
                 for ref_i in refsLst:
                     if (not last_cell and ref_i.startswith(cand_tgt)) or (last_cell and ref_i == cand_tgt):
                         matches_ref = True
@@ -84,8 +84,8 @@ class Cell(object):
         print "*  Total entries in cell : %d" % ( len(self.table[tgt_key]) )
         i = 0
         for entry in self.table[tgt_key][:]:
-            (cand, feat_str, cand_score) = Entry.printEntry(entry)
-            print "**  %s ||| %s ||| %f ||| %f ||| %s" % ( cand, feat_str, cand_score, Entry.getHypScore(entry), self.getBPTrace(entry) )
+            (cand, feat_str, cand_score) = Hypothesis.printEntry(entry)
+            print "**  %s ||| %s ||| %f ||| %f ||| %s" % ( cand, feat_str, cand_score, Hypothesis.getHypScore(entry), self.getBPTrace(entry) )
             i += 1
             if i == 5: break
         print
@@ -99,10 +99,10 @@ class Cell(object):
 
         while ( hypTraceStack ):
             trace_entry = hypTraceStack.pop(0)
-            for back_pointer in Entry.getBP(trace_entry):
+            for back_pointer in Hypothesis.getBP(trace_entry):
                 hypTraceStack.insert(0, back_pointer)
-            inf_entry = Entry.getInfEntry(trace_entry)
-            bp_trace += (Entry.getInfCell(trace_entry),)
+            inf_entry = Hypothesis.getInfEntry(trace_entry)
+            bp_trace += (Hypothesis.getInfCell(trace_entry),)
 
         return bp_trace
 
@@ -118,15 +118,15 @@ class Cell(object):
             hypTraceStack.append(entry)
             while ( hypTraceStack ):
                 trace_entry = hypTraceStack.pop(0)
-                for back_pointer in Entry.getBP(trace_entry):
+                for back_pointer in Hypothesis.getBP(trace_entry):
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = Entry.getInfEntry(trace_entry)
+                inf_entry = Hypothesis.getInfEntry(trace_entry)
                 if inf_entry is not None:
-                    src = Entry.getSrc(inf_entry)
-                    tgt = Entry.getHypothesis(inf_entry)
+                    src = Hypothesis.getSrc(inf_entry)
+                    tgt = Hypothesis.getHypothesis(inf_entry)
                 else:
-                    src = Entry.getSrc(trace_entry)
-                    tgt = Entry.getHypothesis(trace_entry)
+                    src = Hypothesis.getSrc(trace_entry)
+                    tgt = Hypothesis.getHypothesis(trace_entry)
 
                 rule = src + " ||| " + tgt
                 if ( rulesUsedDict.has_key(rule) ): rulesUsedDict[rule] += 1
@@ -155,17 +155,17 @@ class Cell(object):
             tF.write("TRACE_BEGIN\n")
             hypTraceStack.append(entry)
             tF.write( "#Input  :: %s\n" % (src_sent) )
-            tF.write( "#Output :: %s ||| %s\n" % (Entry.getHypothesis(entry), Entry.getFeatVec(entry)) )
+            tF.write( "#Output :: %s ||| %s\n" % (Hypothesis.getHypothesis(entry), Hypothesis.getFeatVec(entry)) )
 
             while ( hypTraceStack ):
                 trace_entry = hypTraceStack.pop(0)
-                for back_pointer in Entry.getBP(trace_entry):
+                for back_pointer in Hypothesis.getBP(trace_entry):
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = Entry.getInfEntry(trace_entry)
+                inf_entry = Hypothesis.getInfEntry(trace_entry)
                 if inf_entry is not None:   # Non-leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Entry.getSrc(inf_entry), Entry.getHypothesis(inf_entry), Entry.getFeatVec(inf_entry), Entry.getInfCell(trace_entry) ) )
+                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Hypothesis.getSrc(inf_entry), Hypothesis.getHypothesis(inf_entry), Hypothesis.getFeatVec(inf_entry), Hypothesis.getInfCell(trace_entry) ) )
                 else:                       # Leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Entry.getSrc(trace_entry), Entry.getHypothesis(trace_entry), Entry.getFeatVec(trace_entry), Entry.getInfCell(trace_entry) ) )
+                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Hypothesis.getSrc(trace_entry), Hypothesis.getHypothesis(trace_entry), Hypothesis.getFeatVec(trace_entry), Hypothesis.getInfCell(trace_entry) ) )
 
             tF.write("TRACE_END\n")
             nbest_cnt += 1
@@ -198,10 +198,12 @@ class Cell(object):
 
         for entry in entriesLst:
             if not settings.opts.nbest_format:
-                oF.write( "%s\n" % Entry.getHypothesis(entry) )
+                oF.write( "%s\n" % Hypothesis.getHypothesis(entry) )
             else:
-                (cand, feat_str, cand_score) = Entry.printEntry(entry)
-                oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                #(cand, feat_str, cand_score) = Hypothesis.printEntry(entry)
+                cand = entry.getHypothesis()
+                feat_str = FeatureManager.formatFeatureVals(cand, entry.featVec)
+                oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, entry.cand_score ) )
                 #if not settings.opts.use_unique_nbest:
                 #    oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, cand_score ) )
                 #elif settings.opts.use_unique_nbest and not uniq_tgtDict.has_key(cand):
@@ -226,7 +228,7 @@ class Cell(object):
 
                 # Compute the candidate score for every derivation
                 for entry in self.table[key]:
-                    Entry.scoreCandidate(entry)
+                    Hypothesis.scoreCandidate(entry)
 
                 # Sort the entries based on the candidate score
                 self.sort4CandScore(key)
@@ -245,7 +247,7 @@ class Cell(object):
             if key[0] == cell_type:
                 # Compute the candidate score for every derivation
                 for entry in self.table[key]:
-                    Entry.scoreSentence(entry)
+                    Hypothesis.scoreSentence(entry)
 
                 # Sort the entries based on the candidate score
                 self.sort4CandScore(key)

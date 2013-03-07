@@ -6,6 +6,9 @@ import shutil
 import sys
 import time
 
+from featureManager import FeatureManager
+from languageModelManager import LanguageModelManager
+
 class Features(object):
     '''Configuration parameters for different models''' 
 
@@ -74,6 +77,9 @@ def args():
     opts.nbest_format = True
     opts.score_diff_threshold = 0.01
     opts.elider = '*__*'
+    opts.lmTupLst = []
+    opts.weightLM = []
+    opts.weightTM = []
 
     if opts.configFile is None:
         sys.stderr.write('ERROR: Please specify a Config file. Exiting!!')
@@ -90,6 +96,12 @@ def args():
         sys.stderr.write("INFO: lm_state and srilm are mutually exclusive; no_lm_state can only be used with KENLM.\n")
         sys.stderr.write("      Setting no_lm_state to True and using SRILM\n")
         opts.no_lm_state = True
+
+    if opts.use_srilm:
+        sys.stderr.write("WARNING: SRILM wrapper is not included with Kriya and needs to be build separately.\n")
+        sys.stderr.write("         Falling back to use KenLM wrapper.\n")
+        sys.stderr.write("** If you would like to use SRILM, comment out/remove the lines: 94-98 in Kriya-Decoder/settings.py **\n")
+        opts.use_srilm = False
 
     sys.stderr.write( "INFO: Using the N-gram size      : %d\n" % (opts.n_gram_size) )
     sys.stderr.write( "INFO: Run decoder in 1NT mode    : %s\n" % (opts.one_nt_decode) )
@@ -119,9 +131,6 @@ def args():
         feat.tm = [opts.weight_tmf, opts.weight_tmr, opts.weight_lwf, \
                     opts.weight_lwr, opts.weight_pp]
     feat.wp = opts.weight_wp
-    if len( feat.tm ) != int(opts.tm_weight_cnt):
-        sys.stderr.write( "ERROR: # of TM features doesn't match with TM weights count! Exiting\n" )
-        sys.exit(0)
 
     # Set the nbest_format to 'False' & nbest_limit to '1', if one_best option is set
     if opts.one_best:
@@ -136,29 +145,19 @@ def args():
     if opts.use_srilm: sys.stderr.write( "INFO: Using SRILM language model wrapper ...\n" )
     else: sys.stderr.write( "INFO: Using KenLM language model wrapper ...\n" )
 
-    feat.lm = opts.weight_lm
-    feat.glue = opts.weight_glue
+    # Initialize the language models
+    LanguageModelManager.initLMs(len(opts.weightLM), opts.lmTupLst, opts.use_srilm)
 
-    # Initialize feature vector for Unknown words
-    unk_featLst = [0.0, 0.0, 0.0, 0.0, 0.0, -1, 0.0, 0.0]  # unk rule prob (for unknown words)
-    (lm_score, p_score) = getScores(unk_featLst)
-    opts.U_lpTup = (p_score, lm_score, unk_featLst)
+    # Set weights for the features
+    FeatureManager.glue = opts.weight_glue
+    FeatureManager.wp = opts.weight_wp
+    FeatureManager.lm = opts.weightLM[:]
+    FeatureManager.tm = opts.weightTM[:]
+    FeatureManager.setFeatureWeights(len(opts.weightLM), len(opts.weightTM), opts.tm_weight_cnt)
 
     if opts.local_path is not 'None':
         sys.stderr.write( "About to copy language model locally ...\n" )
         copyModels()
-
-
-def getScores(fLst):
-    '''Get the score given the feat vector'''
-    global feat
-
-    lm_score = feat.lm * fLst[6]
-    p_score = (feat.tm[0] * fLst[0]) + (feat.tm[1] * fLst[1]) + (feat.tm[2] * fLst[2]) + \
-                (feat.tm[3] * fLst[3]) + (feat.tm[4] * fLst[4]) + (feat.wp * fLst[5]) + \
-                lm_score + (feat.glue * fLst[7])
-
-    return (lm_score, p_score)
 
 
 def loadConfig():
@@ -215,12 +214,15 @@ def loadConfig():
                 if not opts.ruleFile: opts.ruleFile = ttable_file
             elif parameter_line == "[ttable-limit]": opts.ttl = int(line)
             elif parameter_line == "[lmodel-file]":
-                opts.n_gram_size, lm_file = line.split(' ')
-                opts.n_gram_size = int( opts.n_gram_size )
-                if not opts.lmFile: opts.lmFile = lm_file
+                n_gram_size, lm_file = line.split(' ')
+                opts.n_gram_size = int( n_gram_size )
+                opts.lmTupLst.append( (opts.n_gram_size, lm_file) )
             elif parameter_line == "[weight_wp]": opts.weight_wp = float( line )
             elif parameter_line == "[weight_glue]": opts.weight_glue = float( line )
-            elif parameter_line == "[weight_lm]": opts.weight_lm = float( line )
+            elif parameter_line == "[weight_lm]":
+                opts.weightLM.append( float( line ) )
+            elif parameter_line == "[weight_tm]":
+                opts.weightTM.append( [float(x) for x in line.split(' ')] )
             elif parameter_line == "[n-best-list]":
                 if line.find("=") <= 0:
                     if line.isdigit():
@@ -242,8 +244,6 @@ def loadConfig():
                     if feat == "use-unique-nbest" or feat == "use_unique_nbest": opts.use_unique_nbest = False
                     elif feat == "nbest-format" or feat == "nbest_format": opts.nbest_format = False
                     elif feat == "one-best" or feat == "one_best": opts.one_best = False
-            elif parameter_line == "[weight_tm]":
-                tmLst.append( line )
 
     cF.close()
     if tmLst:

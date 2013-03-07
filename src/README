@@ -22,6 +22,7 @@ The Kriya tuning script expects the following environment variables to be set fo
 
 NGRAM_SWIG_KENLM    - Path to the Python wrapper for KenLM (eg. '$KRIYA_DIR/Kriya-Decoder/wrapper-kenlm')
 NGRAM_SWIG_SRILM    - Path to the Python wrapper for SRILM (eg. '$KRIYA_DIR/Kriya-Decoder/wrapper-srilm')
+                        The wrapper for SRILM is not distributed with Kriya. Pls read 'Kriya-Decoder/wrapper-srilm/README'
 
 MEGAM_DIR           - Path containing megam binary (required for PRO tuning)
 SVMRANK_DIR         - Path containing svmrank binary (required for PRO tuning)

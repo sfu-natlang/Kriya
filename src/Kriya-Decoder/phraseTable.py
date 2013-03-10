@@ -109,8 +109,8 @@ class PhraseTable(object):
                 glueItems = line.split('#')                 # Handle and ignore any comments embedded on the same line
                 line = glueItems[0].strip()
 
-                (src, tgt, probs) = line.split(' ||| ')
-                rule_obj = RuleItem.initGlue(src, tgt, probs)
+                (src, tgt, glue_val) = line.split(' ||| ')
+                rule_obj = RuleItem.initGlue(src, tgt, float(glue_val))
                 if (settings.opts.no_glue_penalty and src == 'S__1 X__2'):
                     rule_obj.turnOffGlue()
 

@@ -60,7 +60,6 @@ class Parse(object):
             # if the word is UNK; add it to ruleDict as: X -> <w_i, w_i> with default prob
             if not PhraseTable.hasRule(p_word):
                 (unk_score, unk_lm_heu, unk_featVec) = FeatureManager.unkRuleTup
-                #PhraseTable.addUNKRule( p_word, Hypothesis(unk_score, unk_lm_heu, p_word, p_word, unk_featVec[:], p_word) )
                 PhraseTable.addUNKRule( p_word, RuleItem.initUNKRule(p_word, unk_featVec, unk_score, unk_lm_heu) )
 
             # Known (X -> <w_i, w_t>) or unknown (X -> <w_i, w_i>) rules are now flushed to the chart

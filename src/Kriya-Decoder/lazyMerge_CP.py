@@ -4,8 +4,9 @@
 import heapq
 from operator import attrgetter
 
-from featureManager import FeatureManager
-from languageModelManager import LanguageModelManager
+from featureManager import FeatureManager as fm
+from languageModelManager import LanguageModelManager as lmm
+from features import StatefulFeatures as sff
 from hypothesis import Hypothesis    # used for debugging
 from refPhrases import RefPhrases
 import settings
@@ -366,30 +367,27 @@ class Cube(object):
 
     def mergeEntries(self, entriesLst, cube_indx):
 
-        dim = 0
-        for ent_obj in entriesLst:
-            # @type ent_obj Entry
-            if dim == 0:
-                score = ent_obj.score - ent_obj.lm_heu
-                fVec = ent_obj.featVec[:]
-                cons_item = ConsequentItem(ent_obj.tgt, ent_obj.tgt_elided, ent_obj.lm_right)
-            else:
-                score += (ent_obj.score - ent_obj.lm_heu)
-                f_idx = 0
-                for feat_val in ent_obj.featVec:
-                    fVec[f_idx] += feat_val
-                    f_idx += 1
-                # Add antecedent item to the consequent item
-                cons_item.addAntecedent( ent_obj.tgt, ent_obj.tgt_elided, ent_obj.lm_right )
-            dim += 1
+        # First process the goal: this will be a (regular/glue) rule
+        goal_ent = entriesLst[0]
+        sf_f_obj = sff.copySFFeat(goal_ent.sf_feat)
+        score = goal_ent.getScoreSansLmHeu()
 
-        if ( Lazy.is_last_cell or (Lazy.cell_span[0] == 0 and Lazy.cell_type == 'S') ):
-            cons_item.addLeftSMarker()
-        if ( Lazy.is_last_cell ):
-            cons_item.addRightSMarker()
-        cons_item.mergeAntecedents()
+        # Now process the antecedents
+        anteTgts = []
+        anteSfFeats = []
+        anteItemsStates = []
+        for ante_ent in entriesLst[1:]:
+            score += ante_ent.getScoreSansLmHeu()
+            # Add antecedent item to the consequent item
+            anteTgts.append( ante_ent.tgt )
+            anteSfFeats.append( ante_ent.sf_feat )
+            anteItemsStates.append( ante_ent.consItems )
+            #cons_item.addAntecedent( ante_ent.tgt, ante_ent.tgt_elided, ante_ent.lm_right )
 
-        if settings.opts.force_decode and not Lazy.candMatchesRef(cons_item.tgt):
+        (tgt_hyp, newConsItems) = lmm.helperConsItem(Lazy.is_last_cell, Lazy.cell_type, \
+                                    Lazy.cell_span, goal_ent.tgt, goal_ent.consItems, anteTgts, anteItemsStates)
+
+        if settings.opts.force_decode and not Lazy.candMatchesRef(tgt_hyp):
             return (score, None)                             # Hypothesis wouldn't lead to reference; ignore this
 
         """
@@ -398,8 +396,8 @@ class Cube(object):
             -1 : Hyp was seen earlier but current one has a better score; create a new entry to replace the existing one
              0 : Hyp was seen earlier and has a poor score than the existing one; ignore this
         """
-        score_wo_LM = score - LanguageModelManager.getLMScore(fVec)
-        hyp_status = Lazy.getHypothesisStatus(cons_item.tgt, score_wo_LM)
+        score_wo_LM = score - sf_f_obj.aggregFeatScore(anteSfFeats)
+        hyp_status = Lazy.getHypothesisStatus(tgt_hyp, score_wo_LM)
 
         """ Should we recombine hypothesis?
             A new hypothesis is always added; query LM for lm-score and create new entry_obj.
@@ -408,134 +406,13 @@ class Cube(object):
             ii) use_unique_nbest is True and the new hyp is better than the existing one.
         """
         if ( hyp_status == -2 ):
-            (score, lm_heu, fVec, e_tgt, out_state) = LanguageModelManager.helperLM(score, cons_item, Lazy.is_last_cell, fVec[:])
-            entry_obj = Hypothesis(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[0], entriesLst[1:], 0.0, out_state)
+            sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
+            score += sf_f_obj.comp_score
+            entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
+                                   entriesLst[0].inf_rule, entriesLst[1:], 0.0, newConsItems)
         elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):
             entry_obj = None
-        else: entry_obj = Hypothesis(score, 0, self.src_side, cons_item.tgt, fVec, '', self.depth_hier, (), entriesLst[0], entriesLst[1:])
+        else: entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
+                                     entriesLst[0].inf_rule, entriesLst[1:])
 
         return (score, entry_obj)
-
-
-class ConsequentItem(object):
-    """ Class for an Consequent Item (result of merging two antecendents)"""
-
-    __slots__ = "tgt", "e_tgt", "e_len", "eTgtLst", "anteItems", "edgeTup", "r_lm_state", "statesLst", "mgramSpans"
-
-    def __init__(self, raw_tgt, raw_e_tgt, lm_right):
-        self.tgt = raw_tgt
-        self.e_tgt = raw_e_tgt
-        self.eTgtLst = []
-        self.anteItems = []
-        self.r_lm_state = lm_right
-        self.setState()
-
-    def verify(self):
-        ''' Verifies the state object by printing the state (for debugging) '''
-        if self.r_lm_state is not None: KENLangModel.printState(self.r_lm_state)
-        else: print "  >> Consequent state : None"
-        if len(self.anteItems) >= 1:
-            if self.anteItems[0][2] is not None: KENLangModel.printState(self.anteItems[0][2])
-            else: print "    >>> Antecedent state-1 : None"
-        if len(self.anteItems) == 2:
-            if self.anteItems[1][2] is not None: KENLangModel.printState(self.anteItems[1][2])
-            else: print "    >>> Antecedent state-2 : None"
-
-    def setState(self):
-        '''Set the beginning and end state of the consequent item as a tuple'''
-
-        beg_state = 0
-        end_state = 0
-        if self.tgt.startswith('X__1') or self.tgt.startswith('S__1'): beg_state = 1
-        elif self.tgt.startswith('X__2'): beg_state = 2
-
-        if self.tgt.endswith('X__1'): end_state = 1
-        elif self.tgt.endswith('X__2'): end_state = 2
-
-        self.edgeTup = (beg_state, end_state)
-
-    def __del__(self):
-        '''Clear the data-structures'''
-
-        del self.eTgtLst
-        del self.anteItems
-        del self.statesLst
-        del self.mgramSpans
-        self.r_lm_state = None
-
-    def addAntecedent(self, tgt, e_tgt, right_lm):
-        self.anteItems.append( (tgt, e_tgt, right_lm) )
-
-    def addLeftSMarker(self):
-        '''Add the left sentence marker and also adjust offsets to reflect this'''
-
-        if (self.edgeTup[0] == 0 and not self.tgt.startswith('<s>')) \
-            or (self.edgeTup[0] == 1 and not self.anteItems[0][0].startswith('<s>')) \
-            or (self.edgeTup[0] == 2 and not self.anteItems[1][0].startswith('<s>')):
-                #self.tgt = '<s> ' + self.tgt
-                self.e_tgt = '<s> ' + self.e_tgt
-
-    def addRightSMarker(self):
-        '''Add the right sentence marker'''
-
-        if (self.edgeTup[1] == 0 and not self.tgt.endswith('</s>')) \
-            or (self.edgeTup[1] == 1 and not self.anteItems[0][0].endswith('</s>')) \
-            or (self.edgeTup[1] == 2 and not self.anteItems[1][0].endswith('</s>')):
-                #self.tgt = self.tgt + ' </s>'
-                self.e_tgt = self.e_tgt + ' </s>'
-                self.r_lm_state = None
-                if self.edgeTup[1] != 0: self.edgeTup = (self.edgeTup[0], 0)
-
-    def mergeAntecedents(self):
-
-        self.setLMState()
-        self.e_len = 0
-        self.statesLst = []
-        self.mgramSpans = []
-        mgram_beg = 0
-        tgtItems = []
-        curr_state = None
-
-        for term in self.e_tgt.split():
-            if term == "X__1" or term == "S__1":
-                tgtItems.append( self.anteItems[0][0] )
-                tempLst = self.anteItems[0][1].split()
-                next_state = self.anteItems[0][2]
-            elif term == "X__2":
-                tgtItems.append( self.anteItems[1][0] )
-                tempLst = self.anteItems[1][1].split()
-                next_state = self.anteItems[1][2]
-            else:
-                tgtItems.append( term )
-                self.eTgtLst.append(term)
-                self.e_len += 1
-                continue
-
-            for ante_term in tempLst:
-                if ante_term == settings.opts.elider:
-                    if (self.e_len - mgram_beg >= settings.opts.n_gram_size \
-                            or curr_state is not None) and mgram_beg != self.e_len:
-                        self.mgramSpans.append( (mgram_beg, self.e_len) )
-                        self.statesLst.append( curr_state )
-                    curr_state = next_state
-                    if settings.opts.no_lm_state: mgram_beg = self.e_len + 1
-                    else: mgram_beg = self.e_len + settings.opts.n_gram_size
-                self.eTgtLst.append(ante_term)
-                self.e_len += 1
-
-        if (self.e_len - mgram_beg >= settings.opts.n_gram_size \
-                or curr_state is not None) and mgram_beg != self.e_len:
-            self.mgramSpans.append( (mgram_beg, self.e_len) )
-            self.statesLst.append( curr_state )
-
-        self.tgt = ' '.join(tgtItems)
-        self.e_tgt = ' '.join(self.eTgtLst)
-
-    def setLMState(self):
-        '''Set the right LM state for the consequent item'''
-
-        if self.r_lm_state is not None: pass
-        elif self.edgeTup[1] == 1:
-            self.r_lm_state = self.anteItems[0][2]
-        elif self.edgeTup[1] == 2:
-            self.r_lm_state = self.anteItems[1][2]

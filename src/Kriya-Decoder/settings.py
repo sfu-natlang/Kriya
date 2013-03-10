@@ -149,10 +149,10 @@ def args():
     LanguageModelManager.initLMs(len(opts.weightLM), opts.lmTupLst, opts.use_srilm)
 
     # Set weights for the features
-    FeatureManager.glue = opts.weight_glue
-    FeatureManager.wp = opts.weight_wp
-    FeatureManager.lm = opts.weightLM[:]
-    FeatureManager.tm = opts.weightTM[:]
+    FeatureManager.glue_wgt = opts.weight_glue
+    FeatureManager.wp_wgt = opts.weight_wp
+    FeatureManager.lmWgt = opts.weightLM[:]
+    FeatureManager.tmWgt = opts.weightTM[:]
     FeatureManager.setFeatureWeights(len(opts.weightLM), len(opts.weightTM), opts.tm_weight_cnt)
 
     if opts.local_path is not 'None':

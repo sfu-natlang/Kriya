@@ -4,26 +4,27 @@ import sys
 
 import settings
 from featureManager import FeatureManager
-from languageModelManager import LanguageModelManager
+from features import StatelessFeatures
+from features import StatefulFeatures
+from languageModelManager import LanguageModelManager as lmm
+from languageModelManager import ConsequentItem
 
 class Hypothesis(object):
     '''Individual entries in the cells of the parse triangle/ rules list'''
 
-    __slots__ = "score", "lm_heu", "src", "tgt", "featVec", "tgt_elided", "depth_hier", "inf_cell", "inf_entry", "bp", "cand_score", "lm_right"
+    __slots__ = "score", "src", "tgt", "sf_feat", "depth_hier", "inf_cell", "inf_rule", "bp", "cand_score", "consItems"
  
-    def __init__(self, score, lm_heu, src, tgt, featVec, tgt_elided, rule_depth=0, inf_cell=(), inf_entry=None, bp=(), cand_score=0.0, r_lm_state=None):
+    def __init__(self, score, src, tgt, sf_f_obj, rule_depth=0, inf_cell=(), inf_rule=None, bp=(), cand_score=0.0, conseqItems=[]):
         self.score = score
-        self.lm_heu = lm_heu
         self.src = src
         self.tgt = tgt
-        self.featVec = featVec[:]
-        self.tgt_elided = tgt_elided
+        self.sf_feat = sf_f_obj
         self.depth_hier = rule_depth
         self.inf_cell = inf_cell
-        self.inf_entry = inf_entry                                      # Entry object for the consequent entry
-        self.bp = bp                                                    # List of entry objects of the antecedents
+        self.inf_rule = inf_rule                            # Rule object for the consequent entry
+        self.bp = bp                                        # List of entry objects of the antecedents
         self.cand_score = cand_score
-        self.lm_right = r_lm_state
+        self.consItems = conseqItems[:]
 
     def recombineEntry(self, hyp_w_LM):
         '''Hypothesis recombination: LM info from an existing hypothesis is copied into a new hypothesis with better score'''
@@ -35,14 +36,12 @@ class Hypothesis(object):
             print
             sys.exit(1)
 
-        self.lm_heu = hyp_w_LM.lm_heu
-        self.tgt_elided = hyp_w_LM.tgt_elided
         self.depth_hier = hyp_w_LM.depth_hier
         self.inf_cell = hyp_w_LM.inf_cell
-        self.lm_right = hyp_w_LM.lm_right
+        self.consItems = hyp_w_LM.consItems[:]
 
-        lm_score_diff, self.featVec = LanguageModelManager.copyLMScores(hyp_w_LM.featVec, self.featVec[:])
-        self.score += self.lm_heu + lm_score_diff
+        lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
+        self.score += self.sf_feat.getLMHeu() + lm_score_diff
         return self.score
 
     def copyLMInfo(self, hyp_w_LM):
@@ -55,19 +54,20 @@ class Hypothesis(object):
             print
             sys.exit(1)
 
-        self.lm_heu = hyp_w_LM.lm_heu
-        self.tgt_elided = hyp_w_LM.tgt_elided
         self.depth_hier = hyp_w_LM.depth_hier
-        self.lm_right = hyp_w_LM.lm_right
+        self.consItems = hyp_w_LM.consItems[:]
 
-        lm_score_diff, self.featVec = LanguageModelManager.copyLMScores(hyp_w_LM.featVec, self.featVec[:])
-        self.score += self.lm_heu + lm_score_diff        
+        lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
+        self.score += self.sf_feat.getLMHeu() + lm_score_diff        
         return self.score
 
     @classmethod
     def createFromRule(cls, r_item, span):
-        return Hypothesis(r_item.score, r_item.lm_heu, r_item.src, r_item.tgt, \
-                          r_item.featVec[:], r_item.tgt, 0, span, None, (), 0.0, None)
+        return Hypothesis(r_item.score, r_item.src, r_item.tgt, StatefulFeatures.initNew(r_item.lm_heu), \
+                          0, span, r_item, (), 0.0, [ConsequentItem(r_item.tgt)])
+
+    def getScoreSansLmHeu(self):
+        return self.score - self.sf_feat.getLMHeu()
 
     def setInfCell(self, span):
         self.inf_cell = span
@@ -77,9 +77,6 @@ class Hypothesis(object):
 
     def getInfEntry(self):
         return self.inf_entry
-
-    def getFeatVec(self):
-        return ' '.join( map(lambda x: str(x), self.featVec) )
 
     def getBP(self):
         '''Returns the back-pointer of the current hypothesis'''
@@ -100,21 +97,39 @@ class Hypothesis(object):
             return self.tgt[:-5]
         else: return self.tgt
 
+    def getFeatVec(self):
+        '''Return the feature values of the Hypothesis as a vector'''
+
+        cand_hyp = self.getHypothesis()
+        sl_feat = self.compStatelessFeats()
+        feat_str = FeatureManager.formatFeatureVals(cand_hyp, sl_feat, self.sf_feat)
+        return [ float(x) for x in feat_str.split(' ') ]
+
     def printEntry(self):
         '''Prints the specific elements of the result'''
 
-        cand_hyp = self.getHypothesis()        
-        feat_str = FeatureManager.formatFeatureVals(cand_hyp, self.featVec)
+        cand_hyp = self.getHypothesis()
+        sl_feat = self.compStatelessFeats()
+        feat_str = FeatureManager.formatFeatureVals(cand_hyp, sl_feat, self.sf_feat)
         return cand_hyp, feat_str, self.cand_score
+
+    def compStatelessFeats(self):
+        sl_feat = StatelessFeatures.copySLFeat(self.inf_rule.sl_feat)
+        entryStack = [ent_obj for ent_obj in self.bp]
+        
+        while entryStack:
+            ent_obj = entryStack.pop(0)
+            sl_feat.aggregFeatScore(ent_obj.inf_rule.sl_feat)
+            for bp_ent_obj in ent_obj.bp:
+                entryStack.append(bp_ent_obj)
+
+        return sl_feat
 
     def getHypScore(self):
         return self.score
 
-    def getLMHeu(self):
-        return self.lm_heu
-
     def getScoreSansLM(self):
-        return self.score - self.lm_heu - LanguageModelManager.getLMScore(self.featVec)
+        return self.score - self.sf_feat.getStateScore()
 
     def scoreCandidate(self):
         self.cand_score = self.score
@@ -128,8 +143,7 @@ class Hypothesis(object):
         '''Print the entry (for debugging purposes)'''
 
         print "Score    :", self.score
-        print "LM Heu   :", self.lm_heu
+        print "LM Heu   :", self.sf_feat.getLMHeu()
         print "Target   :", self.tgt
-        print "Elided   :", self.tgt_elided
-        print "Feat-vec :", self.featVec
+        print "Feat-vec :", self.getFeatVec()
         print "Bpointer :", self.bp

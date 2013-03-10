@@ -83,26 +83,26 @@ class Cell(object):
         tgt_key = self.calcCandScore(cell_type)
         print "*  Total entries in cell : %d" % ( len(self.table[tgt_key]) )
         i = 0
-        for entry in self.table[tgt_key][:]:
-            (cand, feat_str, cand_score) = Hypothesis.printEntry(entry)
-            print "**  %s ||| %s ||| %f ||| %f ||| %s" % ( cand, feat_str, cand_score, Hypothesis.getHypScore(entry), self.getBPTrace(entry) )
+        for ent_obj in self.table[tgt_key][:]:
+            (cand, feat_str, cand_score) = ent_obj.printEntry()
+            print "**  %s ||| %s ||| %g ||| %g ||| %s" % ( cand, feat_str, ent_obj.getScoreSansLmHeu(), \
+                                                           ent_obj.getHypScore(), self.getBPTrace(ent_obj) )
             i += 1
             if i == 5: break
         print
 
-    def getBPTrace(self, entry):
+    def getBPTrace(self, ent_obj):
         '''Get the Back-Pointer trace'''
 
         bp_trace = []
         hypTraceStack = []
-        hypTraceStack.append(entry)
+        hypTraceStack.append(ent_obj)
 
         while ( hypTraceStack ):
             trace_entry = hypTraceStack.pop(0)
             for back_pointer in Hypothesis.getBP(trace_entry):
                 hypTraceStack.insert(0, back_pointer)
-            inf_entry = Hypothesis.getInfEntry(trace_entry)
-            bp_trace += (Hypothesis.getInfCell(trace_entry),)
+            bp_trace += (trace_entry.getInfCell(),)
 
         return bp_trace
 
@@ -198,17 +198,15 @@ class Cell(object):
 
         for entry in entriesLst:
             if not settings.opts.nbest_format:
-                oF.write( "%s\n" % Hypothesis.getHypothesis(entry) )
+                oF.write( "%s\n" % entry.getHypothesis() )
             else:
-                #(cand, feat_str, cand_score) = Hypothesis.printEntry(entry)
-                cand = entry.getHypothesis()
-                feat_str = FeatureManager.formatFeatureVals(cand, entry.featVec)
-                oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, entry.cand_score ) )
+                (cand, feat_str, cand_score) = entry.printEntry()
+                oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
                 #if not settings.opts.use_unique_nbest:
-                #    oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
                 #elif settings.opts.use_unique_nbest and not uniq_tgtDict.has_key(cand):
                 #    uniq_tgtDict[cand] = 1
-                #    oF.write( "%d||| %s ||| %s ||| %f\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
 
             nbest_cnt += 1
             if nbest_cnt == nbest_2_produce: break  # stop after producing required no of items

@@ -59,6 +59,17 @@ class FeatureManager(object):
         return StatelessFeatures(tmFeatVec, -term_count)
 
     @classmethod
+    def getScore4TTL(cls, sl_f_obj):
+        if len(cls.tmWgt) == 1:
+            return sl_f_obj.tmFVec[cls.egivenf_offset]
+
+        ttl_score = 0.0
+        for tm_indx in xrange( len(cls.tmWgt) ):
+            tm_offset = tm_indx * len( cls.tmWgt[tm_indx] )
+            ttl_score += (cls.tmWgt[tm_indx][cls.egivenf_offset] * sl_f_obj.tmFVec[tm_offset + cls.egivenf_offset])
+        return ttl_score
+
+    @classmethod
     def buildGlueFeats(cls, glue_val):
         '''Create the stateless feature object for a glue rule'''
 
@@ -71,17 +82,6 @@ class FeatureManager(object):
 
         tmFeatVec = [0.0 for x in xrange(len(cls.tmWgt) * len(cls.tmWgt[0]))]
         return StatelessFeatures(tmFeatVec, -1)
-
-    @classmethod
-    def getScore4TTL(cls, sl_f_obj):
-        if len(cls.tmWgt) == 1:
-            return sl_f_obj.tmFVec[cls.egivenf_offset]
-
-        p_score = 0.0
-        for tm_indx in xrange( len(cls.tmWgt) ):
-            tm_offset = tm_indx * len( cls.tmWgt[tm_indx] )
-            p_score += (cls.tmWgt[tm_indx][cls.egivenf_offset] * sl_f_obj.tmFVec[tm_offset + cls.egivenf_offset])
-        return p_score
 
     @classmethod
     def turnOffGlue(cls, sl_f_obj):
@@ -107,10 +107,6 @@ class FeatureManager(object):
             p_score += (cls.lmWgt[lm_indx] * sf_f_obj.lmFVec[lm_indx])
 
         return p_score
-
-    @classmethod
-    def scoreStatefulFeatures(cls, sf_f_obj):
-        return sf_f_obj.scoreFeature()
 
     @classmethod
     def formatFeatureVals(cls, cand_hyp, sl_f_obj, sf_f_obj, only_feat_vals=False):

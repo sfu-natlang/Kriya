@@ -90,7 +90,7 @@ class Lazy(object):
                 # @type mP_entry_obj Entry
                 entry_exists = Lazy.indexHypothesis(mP_entry_obj.tgt, Hypothesis.getScoreSansLM(mP_entry_obj), h_indx)
                 if (entry_exists is None or not settings.opts.use_unique_nbest):
-                    Hypothesis.setInfCell(mP_entry_obj, Lazy.cell_span)
+                    mP_entry_obj.inf_cell = Lazy.cell_span
                     if self.cbp_diversity > 0: self.recordDiversity(cube_indx)
                     heapq.heappush(self.coverageHeap, (h_score, h_indx, mP_entry_obj, cube_indx, mP_r))
                 elif entry_exists == -1:
@@ -368,9 +368,8 @@ class Cube(object):
     def mergeEntries(self, entriesLst, cube_indx):
 
         # First process the goal: this will be a (regular/glue) rule
-        goal_ent = entriesLst[0]
-        sf_f_obj = sff.copySFFeat(goal_ent.sf_feat)
-        score = goal_ent.getScoreSansLmHeu()
+        sf_f_obj = sff.initNew(entriesLst[0].lm_heu)
+        score = entriesLst[0].getScoreSansLmHeu()
 
         # Now process the antecedents
         anteTgts = []
@@ -378,14 +377,12 @@ class Cube(object):
         anteItemsStates = []
         for ante_ent in entriesLst[1:]:
             score += ante_ent.getScoreSansLmHeu()
-            # Add antecedent item to the consequent item
             anteTgts.append( ante_ent.tgt )
             anteSfFeats.append( ante_ent.sf_feat )
             anteItemsStates.append( ante_ent.consItems )
-            #cons_item.addAntecedent( ante_ent.tgt, ante_ent.tgt_elided, ante_ent.lm_right )
 
         (tgt_hyp, newConsItems) = lmm.helperConsItem(Lazy.is_last_cell, Lazy.cell_type, \
-                                    Lazy.cell_span, goal_ent.tgt, goal_ent.consItems, anteTgts, anteItemsStates)
+                                    Lazy.cell_span, entriesLst[0].tgt, anteTgts, anteItemsStates)
 
         if settings.opts.force_decode and not Lazy.candMatchesRef(tgt_hyp):
             return (score, None)                             # Hypothesis wouldn't lead to reference; ignore this
@@ -409,10 +406,10 @@ class Cube(object):
             sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
             score += sf_f_obj.comp_score
             entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
-                                   entriesLst[0].inf_rule, entriesLst[1:], 0.0, newConsItems)
+                                   entriesLst[0], entriesLst[1:], newConsItems)
         elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):
             entry_obj = None
         else: entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
-                                     entriesLst[0].inf_rule, entriesLst[1:])
+                                     entriesLst[0], entriesLst[1:])
 
         return (score, entry_obj)

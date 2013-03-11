@@ -33,6 +33,9 @@ class RuleItem(object):
     def initUNKRule(cls, unk_tok, featVec, score, lm_heu):
         return RuleItem(unk_tok, unk_tok, featVec, score, lm_heu)
 
+    def getScoreSansLmHeu(self):
+        return self.score - self.lm_heu
+
     def getScore4TTL(self):
         return FeatureManager.getScore4TTL(self.sl_feat)
 

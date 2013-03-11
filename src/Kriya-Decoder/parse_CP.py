@@ -71,7 +71,7 @@ class Parse(object):
                 p_src = glueSrcLst[0]
                 self.__getGlueRuleSpans((p_i, p_i), p_src)
                 if consObjsLst:
-                    Parse.chartDict[(p_i, p_i)].setSTree()
+                    Parse.chartDict[(p_i, p_i)].has_S_tree = True
                     self.__reduceCell((p_i, p_i), 'S', 'S', final_cell)   # Compute the n-best list from the parse forest
                     if settings.opts.force_decode:
                         force_dec_status = Parse.chartDict[(0, p_i)].forceDecodePrune(self.refsLst, final_cell)
@@ -112,7 +112,7 @@ class Parse(object):
                     for p_src in glueSrcLst: self.__getGlueRuleSpans((p_i, p_j), p_src)
 
                     if consObjsLst:
-                        Parse.chartDict[(p_i, p_j)].setSTree()
+                        Parse.chartDict[(p_i, p_j)].has_S_tree = True
                         self.__reduceCell((p_i, p_j), p_cell_type, p_left_nt, final_cell)
                     if settings.opts.force_decode:
                         force_dec_status = Parse.chartDict[(p_i, p_j)].forceDecodePrune(self.refsLst, final_cell)
@@ -228,7 +228,7 @@ class Parse(object):
         for conseq_obj in consObjsLst:
             rule = conseq_obj.rule
             cube_depth_hier = 0 if (not conseq_obj.spanTup or cell_type == 'S') else conseq_obj.top_X_level + 1
-            ruleRHSLst = self.__getRulesFromPT(rule, span)
+            ruleRHSLst = PhraseTable.getRuleEntries(rule, self.sent_indx)
             if not ruleRHSLst: continue
 
             # Set the maximum depth of the current Cell
@@ -274,10 +274,10 @@ class Parse(object):
         '''Flush the entries (dictionary entries/ candidate hypotheses) to the cell'''
 
         if tgtLst:
-            if key[0] == 'S': Parse.chartDict[span].setSTree()
+            if key[0] == 'S': Parse.chartDict[span].has_S_tree = True
             elif key[0] == 'X':
-                Parse.chartDict[span].setXTree()
-                Parse.chartDict[span].setTopXLevel(cell_max_X_depth)
+                Parse.chartDict[span].has_X_tree = True
+                Parse.chartDict[span].top_X_level = cell_max_X_depth
 
         Parse.chartDict[span].add2Cell(key, tgtLst)
 

@@ -32,7 +32,7 @@ class StatefulFeatures(object):
     
     lmInitLst = []
     __slots__ = "lmFVec", "lm_heu", "comp_score"
-    
+
     def __init__(self, lmFeats, sful_score = 0.0, lm_heu = 0.0):
         self.lmFVec = lmFeats[:]
         self.comp_score = sful_score

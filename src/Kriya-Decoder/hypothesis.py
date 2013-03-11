@@ -12,9 +12,9 @@ from languageModelManager import ConsequentItem
 class Hypothesis(object):
     '''Individual entries in the cells of the parse triangle/ rules list'''
 
-    __slots__ = "score", "src", "tgt", "sf_feat", "depth_hier", "inf_cell", "inf_rule", "bp", "cand_score", "consItems"
+    __slots__ = "score", "src", "tgt", "sf_feat", "depth_hier", "inf_cell", "inf_rule", "bp", "consItems"
  
-    def __init__(self, score, src, tgt, sf_f_obj, rule_depth=0, inf_cell=(), inf_rule=None, bp=(), cand_score=0.0, conseqItems=[]):
+    def __init__(self, score, src, tgt, sf_f_obj, rule_depth=0, inf_cell=(), inf_rule=None, bp=(), conseqItems=[]):
         self.score = score
         self.src = src
         self.tgt = tgt
@@ -23,7 +23,6 @@ class Hypothesis(object):
         self.inf_cell = inf_cell
         self.inf_rule = inf_rule                            # Rule object for the consequent entry
         self.bp = bp                                        # List of entry objects of the antecedents
-        self.cand_score = cand_score
         self.consItems = conseqItems[:]
 
     def recombineEntry(self, hyp_w_LM):
@@ -41,7 +40,7 @@ class Hypothesis(object):
         self.consItems = hyp_w_LM.consItems[:]
 
         lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
-        self.score += self.sf_feat.getLMHeu() + lm_score_diff
+        self.score += self.sf_feat.lm_heu + lm_score_diff
         return self.score
 
     def copyLMInfo(self, hyp_w_LM):
@@ -58,16 +57,19 @@ class Hypothesis(object):
         self.consItems = hyp_w_LM.consItems[:]
 
         lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
-        self.score += self.sf_feat.getLMHeu() + lm_score_diff        
+        self.score += self.sf_feat.lm_heu + lm_score_diff        
         return self.score
 
     @classmethod
     def createFromRule(cls, r_item, span):
         return Hypothesis(r_item.score, r_item.src, r_item.tgt, StatefulFeatures.initNew(r_item.lm_heu), \
-                          0, span, r_item, (), 0.0, [ConsequentItem(r_item.tgt)])
+                          0, span, r_item, (), [ConsequentItem(r_item.tgt)])
 
     def getScoreSansLmHeu(self):
-        return self.score - self.sf_feat.getLMHeu()
+        return self.score - self.sf_feat.lm_heu
+
+    def getScoreSansLM(self):
+        return self.score - self.sf_feat.getStateScore()
 
     def setInfCell(self, span):
         self.inf_cell = span
@@ -85,6 +87,9 @@ class Hypothesis(object):
 
     def getSrc(self):
         return self.src
+
+    def getHypScore(self):
+        return self.score
 
     def getHypothesis(self):
         '''Remove the beginning and end sentence markers in the translation'''
@@ -111,7 +116,7 @@ class Hypothesis(object):
         cand_hyp = self.getHypothesis()
         sl_feat = self.compStatelessFeats()
         feat_str = FeatureManager.formatFeatureVals(cand_hyp, sl_feat, self.sf_feat)
-        return cand_hyp, feat_str, self.cand_score
+        return cand_hyp, feat_str
 
     def compStatelessFeats(self):
         sl_feat = StatelessFeatures.copySLFeat(self.inf_rule.sl_feat)
@@ -125,25 +130,11 @@ class Hypothesis(object):
 
         return sl_feat
 
-    def getHypScore(self):
-        return self.score
-
-    def getScoreSansLM(self):
-        return self.score - self.sf_feat.getStateScore()
-
-    def scoreCandidate(self):
-        self.cand_score = self.score
-
-    def scoreSentence(self):
-        '''Get complete score for candidate including feature functions left-out during search'''
-
-        self.cand_score = self.score
-
     def printIt(self):
         '''Print the entry (for debugging purposes)'''
 
         print "Score    :", self.score
-        print "LM Heu   :", self.sf_feat.getLMHeu()
+        print "LM Heu   :", self.sf_feat.lm_heu
         print "Target   :", self.tgt
         print "Feat-vec :", self.getFeatVec()
         print "Bpointer :", self.bp

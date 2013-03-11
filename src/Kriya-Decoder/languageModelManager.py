@@ -152,19 +152,17 @@ class LanguageModelManager(object):
 
     @classmethod
     def helperConsItem(cls, is_last_cell, cell_type, cell_span, \
-                        goal_tgt, goalItemStates, anteTgts, anteItemStates):
+                        goal_tgt, anteTgts, anteItemStates):
 
         consItemStates = []          # List of objects of type 'ConsequentItem'
         lm_indx = 0
         tgt = ''
         prev_tgt = ''
-        #if not goalItemStates: goalItemStates = [None]
-        for goal_item in goalItemStates:
+        for lm_obj in cls.lmLst:
             anteItems = [x[lm_indx] for x in anteItemStates]
-            if goal_item is None: cons_item = ConsequentItem(goal_tgt)
-            else: cons_item = ConsequentItem(goal_tgt, goal_item.r_lm_state)
-            cons_item.setState(is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems)
-            tgt = cons_item.mergeAntecedents(anteTgts[:], anteItems[:], cls.lmLst[lm_indx])
+            cons_item = ConsequentItem(goal_tgt)
+            tgt = cons_item.setStateNMerge(is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems, lm_obj.lm_order)
+            #tgt = cons_item.mergeAntecedents(anteTgts, anteItems, lm_obj.lm_order)
             if prev_tgt == '':
                 prev_tgt = tgt
             assert (prev_tgt == tgt), "The target hypotheses from different LMs are not same: %s :: %s" % (prev_tgt, tgt)
@@ -204,7 +202,7 @@ class ConsequentItem(object):
             if anteItems[1].r_lm_state is not None: lm_obj.printState(anteItems[1].r_lm_state)
             else: print "    >>> Antecedent state-2 : None"
 
-    def setState(self, is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems):
+    def setStateNMerge(self, is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems, lm_order):
         '''Set the beginning and end state of the consequent item as a tuple'''
 
         beg_state = 0
@@ -220,6 +218,8 @@ class ConsequentItem(object):
         if ( is_last_cell ):
             edgeTup = self.addRightSMarker(goal_tgt, edgeTup, anteTgts)
         self.setLMState(edgeTup, anteItems)
+
+        return self.mergeAntecedents(anteTgts, anteItems, lm_order)
 
     def addLeftSMarker(self, goal_tgt, edgeTup, anteTgts):
         '''Add the left sentence marker and also adjust offsets to reflect this'''
@@ -252,11 +252,8 @@ class ConsequentItem(object):
         elif edgeTup[1] == 2:
             self.r_lm_state = anteItems[1].r_lm_state
 
-    def mergeAntecedents(self, anteTgts, anteItems, lm_obj):
+    def mergeAntecedents(self, anteTgts, anteItems, lm_order):
 
-        self.e_len = 0
-        self.statesLst = []
-        self.mgramSpans = []
         mgram_beg = 0
         eTgtLst = []
         tgtItems = []
@@ -279,17 +276,17 @@ class ConsequentItem(object):
 
             for ante_term in tempLst:
                 if ante_term == settings.opts.elider:
-                    if (self.e_len - mgram_beg >= lm_obj.lm_order \
+                    if (self.e_len - mgram_beg >= lm_order \
                             or curr_state is not None) and mgram_beg != self.e_len:
                         self.mgramSpans.append( (mgram_beg, self.e_len) )
                         self.statesLst.append( curr_state )
                     curr_state = next_state
                     if settings.opts.no_lm_state: mgram_beg = self.e_len + 1
-                    else: mgram_beg = self.e_len + lm_obj.lm_order
+                    else: mgram_beg = self.e_len + lm_order
                 eTgtLst.append(ante_term)
                 self.e_len += 1
 
-        if (self.e_len - mgram_beg >= lm_obj.lm_order \
+        if (self.e_len - mgram_beg >= lm_order \
                 or curr_state is not None) and mgram_beg != self.e_len:
             self.mgramSpans.append( (mgram_beg, self.e_len) )
             self.statesLst.append( curr_state )

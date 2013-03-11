@@ -60,17 +60,17 @@ class PhraseTable(object):
                     else:
                         PhraseTable.src_trie.addText(src)
 
-                if len(prev_src) > 0 and prev_src != src:
-                    entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
-                    PhraseTable.ruleDict[prev_src] = []
-                    tgt_options = 0
-                    for trans_option in entriesLst:
-                        rule_obj = trans_option.rule
-                        rule_obj.scoreRule()
-                        PhraseTable.ruleDict[prev_src].append( rule_obj )
-                        tgt_options += 1
-                        if(self.ttl > 0 and tgt_options >= self.ttl): break
-                    del entriesLst[:]
+                    if prev_src:
+                        entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
+                        PhraseTable.ruleDict[prev_src] = []
+                        tgt_options = 0
+                        for trans_option in entriesLst:
+                            rule_obj = trans_option.rule
+                            rule_obj.scoreRule()
+                            PhraseTable.ruleDict[prev_src].append( rule_obj )
+                            tgt_options += 1
+                            if(self.ttl > 0 and tgt_options >= self.ttl): break
+                        del entriesLst[:]
 
                 rule = RuleItem.initRule(src, tgt, probs)
                 entriesLst.append( TransOption(rule.getScore4TTL(), rule) )

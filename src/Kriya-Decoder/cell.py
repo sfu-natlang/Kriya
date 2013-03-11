@@ -71,7 +71,7 @@ class Cell(object):
                 else: cand_indx += 1
 
             # If all the entries are deleted, then there will be no S derivations in the cell; set has_S_tree as False
-            if not self.table[key]: self.setSTree(False)
+            if not self.table[key]: self.has_S_tree = False
         return self.has_S_tree
 
     def printCell(self, cell_type, sent_indx):
@@ -84,9 +84,9 @@ class Cell(object):
         print "*  Total entries in cell : %d" % ( len(self.table[tgt_key]) )
         i = 0
         for ent_obj in self.table[tgt_key][:]:
-            (cand, feat_str, cand_score) = ent_obj.printEntry()
+            (cand, feat_str) = ent_obj.printEntry()
             print "**  %s ||| %s ||| %g ||| %g ||| %s" % ( cand, feat_str, ent_obj.getScoreSansLmHeu(), \
-                                                           ent_obj.getHypScore(), self.getBPTrace(ent_obj) )
+                                                           ent_obj.score, self.getBPTrace(ent_obj) )
             i += 1
             if i == 5: break
         print
@@ -100,9 +100,9 @@ class Cell(object):
 
         while ( hypTraceStack ):
             trace_entry = hypTraceStack.pop(0)
-            for back_pointer in Hypothesis.getBP(trace_entry):
+            for back_pointer in trace_entry.bp:
                 hypTraceStack.insert(0, back_pointer)
-            bp_trace += (trace_entry.getInfCell(),)
+            bp_trace += (trace_entry.inf_cell,)
 
         return bp_trace
 
@@ -118,15 +118,15 @@ class Cell(object):
             hypTraceStack.append(entry)
             while ( hypTraceStack ):
                 trace_entry = hypTraceStack.pop(0)
-                for back_pointer in Hypothesis.getBP(trace_entry):
+                for back_pointer in trace_entry.bp:
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = Hypothesis.getInfEntry(trace_entry)
+                inf_entry = trace_entry.inf_entry
                 if inf_entry is not None:
-                    src = Hypothesis.getSrc(inf_entry)
-                    tgt = Hypothesis.getHypothesis(inf_entry)
+                    src = inf_entry.src
+                    tgt = inf_entry.getHypothesis()
                 else:
-                    src = Hypothesis.getSrc(trace_entry)
-                    tgt = Hypothesis.getHypothesis(trace_entry)
+                    src = trace_entry.src
+                    tgt = trace_entry.getHypothesis()
 
                 rule = src + " ||| " + tgt
                 if ( rulesUsedDict.has_key(rule) ): rulesUsedDict[rule] += 1
@@ -159,13 +159,13 @@ class Cell(object):
 
             while ( hypTraceStack ):
                 trace_entry = hypTraceStack.pop(0)
-                for back_pointer in Hypothesis.getBP(trace_entry):
+                for back_pointer in trace_entry.bp:
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = Hypothesis.getInfEntry(trace_entry)
+                inf_entry = trace_entry.inf_entry
                 if inf_entry is not None:   # Non-leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Hypothesis.getSrc(inf_entry), Hypothesis.getHypothesis(inf_entry), Hypothesis.getFeatVec(inf_entry), Hypothesis.getInfCell(trace_entry) ) )
+                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( inf_entry.src, Hypothesis.getHypothesis(inf_entry), Hypothesis.getFeatVec(inf_entry), trace_entry.inf_cell ) )
                 else:                       # Leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( Hypothesis.getSrc(trace_entry), Hypothesis.getHypothesis(trace_entry), Hypothesis.getFeatVec(trace_entry), Hypothesis.getInfCell(trace_entry) ) )
+                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( trace_entry.src, Hypothesis.getHypothesis(trace_entry), Hypothesis.getFeatVec(trace_entry), trace_entry.inf_cell ) )
 
             tF.write("TRACE_END\n")
             nbest_cnt += 1
@@ -200,13 +200,13 @@ class Cell(object):
             if not settings.opts.nbest_format:
                 oF.write( "%s\n" % entry.getHypothesis() )
             else:
-                (cand, feat_str, cand_score) = entry.printEntry()
-                oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                (cand, feat_str) = entry.printEntry()
+                oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, entry.score ) )
                 #if not settings.opts.use_unique_nbest:
-                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, entry.score ) )
                 #elif settings.opts.use_unique_nbest and not uniq_tgtDict.has_key(cand):
                 #    uniq_tgtDict[cand] = 1
-                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, cand_score ) )
+                #    oF.write( "%d||| %s ||| %s ||| %g\n" % ( sent_indx, cand, feat_str, entry.score ) )
 
             nbest_cnt += 1
             if nbest_cnt == nbest_2_produce: break  # stop after producing required no of items
@@ -224,43 +224,18 @@ class Cell(object):
                     tgt_key = key
                     break
 
-                # Compute the candidate score for every derivation
-                for entry in self.table[key]:
-                    Hypothesis.scoreCandidate(entry)
-
                 # Sort the entries based on the candidate score
                 self.sort4CandScore(key)
                 tgt_key = key
                 break
         if tgt_key == '':
             raise RuntimeWarning, "Decoder did not produce derivations of the specified type in the present cell"
-        return tgt_key
-
-    def calcSentScore(self, cell_type):
-        '''Calculates the sentence scores (in the last cell) for the entries given a left NT'''
-
-        tgt_key = ''
-
-        for key in self.table.iterkeys():
-            if key[0] == cell_type:
-                # Compute the candidate score for every derivation
-                for entry in self.table[key]:
-                    Hypothesis.scoreSentence(entry)
-
-                # Sort the entries based on the candidate score
-                self.sort4CandScore(key)
-                tgt_key = key
-                break
-        if tgt_key == '':
-            raise RuntimeWarning, "Decoder did not produce derivations of the specified type in the present cell"
-
-        self.sent_scored = True
         return tgt_key
 
     def sort4CandScore(self, key):
         '''Sort the cell entries based on their candidate scores for a given key'''
 
-        self.table[key].sort(key=operator.attrgetter("cand_score"), reverse=True)
+        self.table[key].sort(key=operator.attrgetter("score"), reverse=True)
 
     def check4MaxDepthXRules(self, max_depth):
         """ Checks the cell for X rules of maximum depth. Shallow-n decoding allows only max depth X antecedents for S items

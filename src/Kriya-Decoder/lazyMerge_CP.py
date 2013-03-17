@@ -40,12 +40,8 @@ class Lazy(object):
     def __del__(self):
         '''Clear the data-structures'''
 
-        if self.cubeDict:
-            for cube_obj in self.cubeDict.itervalues():
-                cube_obj = ''        # clears the lists in the Cube class
-            del self.cubeDict
-            del self.coverageDict
-        Lazy.clearTracker();         # clears the tracking dict
+        del Lazy.refsLst
+        del Lazy.hypScoreDict
 
     def setSourceInfo(self, cube_indx, src_rule, spanT, cube_depth_hier, candRefsLst=[]):
         cube_obj = self.__getObject(cube_indx)
@@ -60,7 +56,6 @@ class Lazy(object):
         if self.cubeDict.has_key(cube_indx):
             cube_obj = self.cubeDict[cube_indx]
         else:
-            #cube_obj = Cube(self.cell_span, self.cell_type, self.is_last_cell)
             cube_obj = Cube()
             self.cubeDict[cube_indx] = cube_obj
         return cube_obj
@@ -266,14 +261,6 @@ class Cube(object):
         self.initDimVec = []
         self.trackCubeDict = {}                               # dictionay that tracks the filled boxes in the cube
 
-    def __del__(self):
-        '''Clear the rule and feature lists'''
-
-        self.dimensions = 0
-        self.spanT = ()
-        del self.ruleLst[:]
-        del self.trackCubeDict
-
     def setSourceSide(self, src_rule, spanTup, cube_depth_hier):
         '''Sets the source side rule and span tuple for the current cube'''
 
@@ -372,17 +359,17 @@ class Cube(object):
         score = entriesLst[0].getScoreSansLmHeu()
 
         # Now process the antecedents
-        anteTgts = []
+        anteHyps = []
         anteSfFeats = []
         anteItemsStates = []
         for ante_ent in entriesLst[1:]:
             score += ante_ent.getScoreSansLmHeu()
-            anteTgts.append( ante_ent.tgt )
+            anteHyps.append( ante_ent.tgt )
             anteSfFeats.append( ante_ent.sf_feat )
             anteItemsStates.append( ante_ent.consItems )
 
         (tgt_hyp, newConsItems) = lmm.helperConsItem(Lazy.is_last_cell, Lazy.cell_type, \
-                                    Lazy.cell_span, entriesLst[0].tgt, anteTgts, anteItemsStates)
+                                    Lazy.cell_span, entriesLst[0].tgt.split(), anteHyps, anteItemsStates)
 
         if settings.opts.force_decode and not Lazy.candMatchesRef(tgt_hyp):
             return (score, None)                             # Hypothesis wouldn't lead to reference; ignore this
@@ -403,8 +390,7 @@ class Cube(object):
             ii) use_unique_nbest is True and the new hyp is better than the existing one.
         """
         if ( hyp_status == -2 ):
-            sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
-            score += sf_f_obj.comp_score
+            score += sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
             entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
                                    entriesLst[0], entriesLst[1:], newConsItems)
         elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):

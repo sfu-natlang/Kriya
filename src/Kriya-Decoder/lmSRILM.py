@@ -82,11 +82,11 @@ class SRILangModel(object):
         else: initWrds = wordsLst[0:self.lm_order-1]
 
         # Compute LM heuristic score for the first m-1 words
-        if (wordsLst[0] == "<s>"):
+        if (wordsLst[0] == '<s>'):
             is_S_rule = True
         else:
             is_S_rule = False
-            initWrds = ["<s>"] + initWrds
+            initWrds.insert(0, '<s>')
 
         part_lm_w_edge = 0.0
         part_lm_wo_edge = 0.0

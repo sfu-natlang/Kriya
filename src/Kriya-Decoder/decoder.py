@@ -10,6 +10,11 @@ from parse_CP import Parse
 from phraseTable import PhraseTable
 from refPhrases import RefPhrases
 
+#import gc, pprint
+#gc.set_debug(gc.DEBUG_LEAK | 
+#             gc.DEBUG_UNCOLLECTABLE |
+#             gc.DEBUG_OBJECTS)
+
 def readNParse(sent_count):
     '''Parse the sentences in the array'''
 
@@ -46,6 +51,15 @@ def readNParse(sent_count):
         sent_indx += 1
         if settings.opts.force_decode: coverage_cnt += dec_status
         parse_obj = ''
+
+        """
+        print 'Collecting ...'
+        n = gc.collect()
+        print 'Unreachable objects:', n
+        print 'Remaining Garbage : '
+        pprint.pprint(gc.garbage)
+        print
+        """
 
     inF.close()
     sys.stderr.write( "Time taken for decoding the set      : %1.3g sec\n\n" % (tot_time) )

@@ -19,6 +19,7 @@ def args():
     import optparse
     optparser = optparse.OptionParser(usage="usage: cat input | %prog [options]")
 
+    optparser.add_option("", "--debug", dest="debug", default=False, action="store_true", help="Debug flag")
     optparser.add_option("", "--config", dest="configFile", type="string", help="Configuration file")
     optparser.add_option("", "--one-nt-decode", dest="one_nt_decode", default=False, action="store_true", help="Run decoder in 1NT mode (ignore 2NT rules)")
     optparser.add_option("", "--shallow-hiero", dest="shallow_hiero", default=False, action="store_true", help="Flag for shallow decoding")

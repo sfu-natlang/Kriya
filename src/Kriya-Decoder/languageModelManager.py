@@ -6,7 +6,7 @@ import settings
 
 class LanguageModelManager(object):
 
-    max_lm_order = 5
+    debug = False
     use_srilm = False
     no_dscnt_UNKlm = False
     lmLst = []
@@ -18,6 +18,7 @@ class LanguageModelManager(object):
         assert (tot_lm_feats == len(lmTupLst)), \
                 "Error: # of LM features does not match the number of LMs specified as lmTupLst"
 
+        cls.debug = settings.opts.debug
         cls.use_srilm = use_srilm
         cls.no_dscnt_UNKlm = settings.opts.no_dscnt_UNKlm
         cls.lmLst = []
@@ -25,15 +26,6 @@ class LanguageModelManager(object):
 
         for lm_indx in xrange( tot_lm_feats ):
             (lm_order, lm_file) = lmTupLst[lm_indx]
-            
-            ## ToDo
-            ## Add support for language models having different order (currently they have be of same order)
-            ## This requires change in storing multiple elided-tgts for each hypothesis
-            if lm_indx > 0:
-                assert (lm_order == cls.max_lm_order), \
-                       "Error: Multiple LMs should all have the same lm-order (for now)"
-
-            cls.max_lm_order = lm_order
             sys.stderr.write( "Loading LM file %s ... \n" % (lm_file) )
             t_beg = time.time()
             if cls.use_srilm: lm = SRILangModel(lm_order, lm_file, settings.opts.elider)
@@ -117,55 +109,52 @@ class LanguageModelManager(object):
         for lm_obj in cls.lmLst:
             cons_item = consItems[lm_indx]
             lm_lprob = 0.0
-            new_out_state = cons_item.r_lm_state
 
             # Computing n-gram LM-score for partial candidate hypotheses
-            eTgtLst = cons_item.e_tgt.split(' ')
             if cons_item.e_len < lm_obj.lm_order:
-                if cls.use_srilm: lm_H = lm_obj.getLMHeuCost(eTgtLst, cons_item.e_len)
-                else: lm_H = lm_obj.getLMHeuCost(cons_item.e_tgt, eTgtLst, cons_item.e_len)
-                e_tgt = cons_item.e_tgt
+                if cls.use_srilm: lm_H = lm_obj.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
+                else: lm_H = lm_obj.getLMHeuCost(cons_item)
             else:
                 # Compute the LM probabilities for all complete m-grams in the elided target string, and
                 # Compute heuristic prob for first m-1 terms in target
                 if cls.use_srilm:
-                    (lm_lprob, e_tgt) = lm_obj.scorePhrnElide(eTgtLst, cons_item.e_len, cons_item.mgramSpans)
-                    lm_H = lm_obj.getLMHeuCost(eTgtLst, cons_item.e_len)
+                    (lm_lprob, eTgtLst) = lm_obj.scorePhrnElide(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans)
+                    lm_H = lm_obj.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
                 else:
-                    (lm_lprob, e_tgt, new_out_state) = lm_obj.scorePhrnElide(eTgtLst, cons_item.e_len, cons_item.mgramSpans, cons_item.statesLst, cons_item.r_lm_state)
-                    lm_H = lm_obj.getLMHeuCost(cons_item.e_tgt, eTgtLst, cons_item.e_len)
+                    lm_lprob = lm_obj.scoremGrams(cons_item.phrStateTupLst)
+                    lm_H = lm_obj.getLMHeuCost(cons_item)                
 
             if ( is_last_cell ):                                 # lm_heu is added permanently in the last cell
                 lm_lprob += lm_H
                 lm_H = 0.0
 
             lmFeatVec[lm_indx] += lm_lprob
-            lm_heu = cls.lmWgts[lm_indx] * lm_H
-            tot_lm_score += lm_heu + (cls.lmWgts[lm_indx] * lm_lprob)   # Pruning score including LM and heuristic
-            tot_lm_heu += lm_heu
-
-            consItems[lm_indx].r_lm_state = new_out_state
-            consItems[lm_indx].e_tgt = e_tgt
+            tot_lm_score += (cls.lmWgts[lm_indx] * lm_lprob)     # LM score for the m-grams in this hypothesis
+            tot_lm_heu += (cls.lmWgts[lm_indx] * lm_H)           # Heuristic LM score (pruning score is the sum of heuristic score and lm comp score so far)
             lm_indx += 1
 
         return (tot_lm_score, tot_lm_heu)
 
     @classmethod
     def helperConsItem(cls, is_last_cell, cell_type, cell_span, \
-                        goal_tgt, anteTgts, anteItemStates):
+                        goalTgt, anteHyps, anteItemStates):
 
-        consItemStates = []          # List of objects of type 'ConsequentItem'
-        lm_indx = 0
+        anteTgts = []
+        for tgt in anteHyps:
+            anteTgts.append( tgt.split() )
+
         tgt = ''
-        prev_tgt = ''
+        lm_indx = 0
+        consItemStates = []          # List of objects of type 'ConsequentItem'
         for lm_obj in cls.lmLst:
             anteItems = [x[lm_indx] for x in anteItemStates]
-            cons_item = ConsequentItem(goal_tgt)
-            tgt = cons_item.setStateNMerge(is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems, lm_obj.lm_order)
-            #tgt = cons_item.mergeAntecedents(anteTgts, anteItems, lm_obj.lm_order)
-            if prev_tgt == '':
+            cons_item = ConsequentItem(goalTgt)
+            cons_item.setStateNMerge(is_last_cell, cell_type, cell_span, anteTgts, anteItems)
+            tgt = cons_item.mergeAntecedents(anteHyps, anteItems, lm_obj.lm_order, lm_obj)
+            if LanguageModelManager.debug:
+                if lm_indx > 0:
+                    assert (prev_tgt == tgt), "The target hypotheses from different LMs are not same: %s :: %s" % (prev_tgt, tgt)
                 prev_tgt = tgt
-            assert (prev_tgt == tgt), "The target hypotheses from different LMs are not same: %s :: %s" % (prev_tgt, tgt)
             consItemStates.append(cons_item)
             lm_indx += 1
 
@@ -174,22 +163,13 @@ class LanguageModelManager(object):
 class ConsequentItem(object):
     """ Class for an Consequent Item (result of merging two antecendents)"""
 
-    __slots__ = "e_tgt", "e_len", "r_lm_state", "statesLst", "mgramSpans"
+    __slots__ = "e_len", "r_lm_state", "eTgtLst", "phrStateTupLst"
 
-    def __init__(self, e_tgt, lm_right = None):
-        self.e_tgt = e_tgt
+    def __init__(self, goalTgt):
         self.e_len = 0
-        self.r_lm_state = lm_right
-        self.statesLst = []
-        self.mgramSpans = []
-
-    def __del__(self):
-        '''Clear the data-structures'''
-
-        self.e_tgt = ''
         self.r_lm_state = None
-        del self.statesLst
-        del self.mgramSpans
+        self.eTgtLst = goalTgt[:]
+        self.phrStateTupLst = []
 
     def verify(self, lm_obj, anteItems):
         ''' Verifies the state object by printing the state (for debugging) '''
@@ -202,42 +182,38 @@ class ConsequentItem(object):
             if anteItems[1].r_lm_state is not None: lm_obj.printState(anteItems[1].r_lm_state)
             else: print "    >>> Antecedent state-2 : None"
 
-    def setStateNMerge(self, is_last_cell, cell_type, cell_span, goal_tgt, anteTgts, anteItems, lm_order):
+    def setStateNMerge(self, is_last_cell, cell_type, cell_span, anteTgts, anteItems):
         '''Set the beginning and end state of the consequent item as a tuple'''
 
         beg_state = 0
         end_state = 0
-        if goal_tgt.startswith('X__1') or goal_tgt.startswith('S__1'): beg_state = 1
-        elif goal_tgt.startswith('X__2'): beg_state = 2
-        if goal_tgt.endswith('X__1'): end_state = 1
-        elif goal_tgt.endswith('X__2'): end_state = 2
+        if self.eTgtLst[0] == 'X__1' or self.eTgtLst[0] == 'S__1': beg_state = 1
+        elif self.eTgtLst[0] == 'X__2': beg_state = 2
+        if self.eTgtLst[-1] == 'X__1': end_state = 1
+        elif self.eTgtLst[-1] == 'X__2': end_state = 2
         edgeTup = (beg_state, end_state)
 
         if ( is_last_cell or (cell_span[0] == 0 and cell_type == 'S') ):
-            self.addLeftSMarker(goal_tgt, edgeTup, anteTgts)
+            self.addLeftSMarker(edgeTup, anteTgts)
         if ( is_last_cell ):
-            edgeTup = self.addRightSMarker(goal_tgt, edgeTup, anteTgts)
+            edgeTup = self.addRightSMarker(edgeTup, anteTgts)
         self.setLMState(edgeTup, anteItems)
 
-        return self.mergeAntecedents(anteTgts, anteItems, lm_order)
-
-    def addLeftSMarker(self, goal_tgt, edgeTup, anteTgts):
+    def addLeftSMarker(self, edgeTup, anteTgts):
         '''Add the left sentence marker and also adjust offsets to reflect this'''
 
-        if (edgeTup[0] == 0 and not goal_tgt.startswith('<s>')) \
-            or (edgeTup[0] == 1 and not anteTgts[0].startswith('<s>')) \
-            or (edgeTup[0] == 2 and not anteTgts[1].startswith('<s>')):
-                #goal_tgt = '<s> ' + goal_tgt
-                self.e_tgt = '<s> ' + self.e_tgt
+        if (edgeTup[0] == 0 and not self.eTgtLst[0] == '<s>') \
+            or (edgeTup[0] == 1 and not anteTgts[0][0] == '<s>') \
+            or (edgeTup[0] == 2 and not anteTgts[1][0] == '<s>'):
+                self.eTgtLst.insert(0, '<s>')
 
-    def addRightSMarker(self, goal_tgt, edgeTup, anteTgts):
+    def addRightSMarker(self, edgeTup, anteTgts):
         '''Add the right sentence marker'''
 
-        if (edgeTup[1] == 0 and not goal_tgt.endswith('</s>')) \
-            or (edgeTup[1] == 1 and not anteTgts[0].endswith('</s>')) \
-            or (edgeTup[1] == 2 and not anteTgts[1].endswith('</s>')):
-                #goal_tgt = goal_tgt + ' </s>'
-                self.e_tgt = self.e_tgt + ' </s>'
+        if (edgeTup[1] == 0 and not self.eTgtLst[-1] == '</s>') \
+            or (edgeTup[1] == 1 and not anteTgts[0][-1] == '</s>') \
+            or (edgeTup[1] == 2 and not anteTgts[1][-1] == '</s>'):
+                self.eTgtLst.append('</s>')
                 self.r_lm_state = None
                 if edgeTup[1] != 0: edgeTup = (edgeTup[0], 0)
 
@@ -252,44 +228,52 @@ class ConsequentItem(object):
         elif edgeTup[1] == 2:
             self.r_lm_state = anteItems[1].r_lm_state
 
-    def mergeAntecedents(self, anteTgts, anteItems, lm_order):
+    def mergeAntecedents(self, anteHyps, anteItems, lm_order, lm_obj):
 
         mgram_beg = 0
-        eTgtLst = []
+        e_new_len = 0
+        eTgtLstNew = []
         tgtItems = []
+        phrStateTupLst = []
         curr_state = None
 
-        for term in self.e_tgt.split():
+        for term in self.eTgtLst:
             if term == "X__1" or term == "S__1":
-                tgtItems.append( anteTgts[0] )
-                tempLst = anteItems[0].e_tgt.split()
+                tgtItems.append( anteHyps[0] )
+                tempLst = anteItems[0].eTgtLst
                 next_state = anteItems[0].r_lm_state
             elif term == "X__2":
-                tgtItems.append( anteTgts[1] )
-                tempLst = anteItems[1].e_tgt.split()
+                tgtItems.append( anteHyps[1] )
+                tempLst = anteItems[1].eTgtLst
                 next_state = anteItems[1].r_lm_state
             else:
                 tgtItems.append( term )
-                eTgtLst.append(term)
-                self.e_len += 1
+                eTgtLstNew.append(term)
+                e_new_len += 1
                 continue
 
             for ante_term in tempLst:
                 if ante_term == settings.opts.elider:
-                    if (self.e_len - mgram_beg >= lm_order \
-                            or curr_state is not None) and mgram_beg != self.e_len:
-                        self.mgramSpans.append( (mgram_beg, self.e_len) )
-                        self.statesLst.append( curr_state )
+                    if (e_new_len - mgram_beg >= lm_order \
+                            or curr_state is not None) and mgram_beg != e_new_len:
+                        self.phrStateTupLst.append( (' '.join( eTgtLstNew[mgram_beg:e_new_len] ), curr_state) )
                     curr_state = next_state
-                    if settings.opts.no_lm_state: mgram_beg = self.e_len + 1
-                    else: mgram_beg = self.e_len + lm_order
-                eTgtLst.append(ante_term)
-                self.e_len += 1
+                    if settings.opts.no_lm_state: mgram_beg = e_new_len + 1
+                    else: mgram_beg = e_new_len + lm_order
+                eTgtLstNew.append(ante_term)
+                e_new_len += 1
 
-        if (self.e_len - mgram_beg >= lm_order \
-                or curr_state is not None) and mgram_beg != self.e_len:
-            self.mgramSpans.append( (mgram_beg, self.e_len) )
-            self.statesLst.append( curr_state )
+        if (e_new_len - mgram_beg >= lm_order \
+                or curr_state is not None) and mgram_beg != e_new_len:
+            self.phrStateTupLst.append( (' '.join( eTgtLstNew[mgram_beg:e_new_len] ), curr_state) )
 
-        self.e_tgt = ' '.join(eTgtLst)
+        # Finally elide the string again and compute the right LM state if required
+        if e_new_len >= lm_order:
+            if self.r_lm_state is None and not settings.opts.no_lm_state:
+                self.r_lm_state = lm_obj.getLMState(' '.join( eTgtLstNew[-lm_order:] ))
+            self.eTgtLst = eTgtLstNew[0:lm_order-1] + [lm_obj.elider] + eTgtLstNew[1-lm_order:]
+        else:
+            self.eTgtLst = eTgtLstNew
+        self.e_len = len(self.eTgtLst)
+
         return ' '.join(tgtItems)

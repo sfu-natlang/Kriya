@@ -2,7 +2,6 @@
 
 import sys
 
-import settings
 from featureManager import FeatureManager
 from features import StatelessFeatures
 from features import StatefulFeatures
@@ -28,12 +27,11 @@ class Hypothesis(object):
     def recombineEntry(self, hyp_w_LM):
         '''Hypothesis recombination: LM info from an existing hypothesis is copied into a new hypothesis with better score'''
 
-        if self.tgt != hyp_w_LM.tgt:                                          # sanity check ...
-            print "ERROR (Serious): Entry objects have different target strings"
-            print "   Current hyp  : ", self.tgt
-            print "   Existing hyp : ", hyp_w_LM.tgt
-            print
-            sys.exit(1)
+        """
+        if settings.opts.debug:                                   # sanity check ...
+            assert (self.tgt == hyp_w_LM.tgt), \
+                "Error: Recombining hyp objects with diff targets: %s ||| %s" % (self.tgt, hyp_w_LM.tgt)
+        """
 
         self.depth_hier = hyp_w_LM.depth_hier
         self.inf_cell = hyp_w_LM.inf_cell
@@ -46,12 +44,11 @@ class Hypothesis(object):
     def copyLMInfo(self, hyp_w_LM):
         '''Copy the language model information from an existing hypothesis to a new one with the same target'''
 
-        if self.tgt != hyp_w_LM.tgt:                                          # sanity check ...
-            print "ERROR (Serious): Entry objects have different target strings"
-            print "   Current hyp  : ", self.tgt
-            print "   Existing hyp : ", hyp_w_LM.tgt
-            print
-            sys.exit(1)
+        """
+        if settings.opts.debug:                                   # sanity check ...
+            assert (self.tgt == hyp_w_LM.tgt), \
+                "Error: Copying LM info bet hyp objects with diff targets: %s ||| %s" % (self.tgt, hyp_w_LM.tgt)
+        """
 
         self.depth_hier = hyp_w_LM.depth_hier
         self.consItems = hyp_w_LM.consItems[:]
@@ -63,12 +60,13 @@ class Hypothesis(object):
     @classmethod
     def createFromRule(cls, r_item, span):
         return Hypothesis(r_item.score, r_item.src, r_item.tgt, StatefulFeatures.initNew(r_item.lm_heu), \
-                          0, span, r_item, (), [ConsequentItem(r_item.tgt)])
+                          0, span, r_item, (), [ConsequentItem(r_item.tgt.split())])
 
     def getScoreSansLmHeu(self):
         return self.score - self.sf_feat.lm_heu
 
     def getScoreSansLM(self):
+        #return self.score - (self.sf_feat.lm_heu + self.sf_feat.comp_score)
         return self.score - self.sf_feat.getStateScore()
 
     def setInfCell(self, span):
@@ -94,13 +92,14 @@ class Hypothesis(object):
     def getHypothesis(self):
         '''Remove the beginning and end sentence markers in the translation'''
 
-        if self.tgt.startswith("<s>") and self.tgt.endswith("</s>"):
-            return self.tgt[4:-5]
-        elif self.tgt.startswith("<s>") and not self.tgt.endswith("</s>"):
-            return self.tgt[4:]
-        elif not self.tgt.startswith("<s>") and self.tgt.endswith("</s>"):
-            return self.tgt[:-5]
-        else: return self.tgt
+        tgtWrds = self.tgt.split()
+        if tgtWrds[0] == "<s>" and tgtWrds[-1] == "</s>":
+            return ' '.join(tgtWrds[1:-1])
+        elif tgtWrds[0] == "<s>" and not tgtWrds[-1] == "</s>":
+            return ' '.join(tgtWrds[1:])
+        elif not tgtWrds[0] == "<s>" and tgtWrds[-1] == "</s>":
+            return ' '.join(tgtWrds[:-1])
+        else: return ' '.join(tgtWrds)
 
     def getFeatVec(self):
         '''Return the feature values of the Hypothesis as a vector'''

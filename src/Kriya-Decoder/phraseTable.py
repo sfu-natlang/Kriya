@@ -17,13 +17,10 @@ class PhraseTable(object):
     tot_rule_pairs = 0
     src_trie = None
     ruleDict = {}
-    __slots__ = "ttl"
+    __slots__ = ()
 
     def __init__(self):
         '''Loading rules from the phrase table and initializing their feature values'''
-
-        from settings import feat
-        self.ttl = settings.opts.ttl
 
         self.loadRules()
         self.loadGlueRules()
@@ -69,7 +66,7 @@ class PhraseTable(object):
                             rule_obj.scoreRule()
                             PhraseTable.ruleDict[prev_src].append( rule_obj )
                             tgt_options += 1
-                            if(self.ttl > 0 and tgt_options >= self.ttl): break
+                            if(settings.opts.ttl > 0 and tgt_options >= settings.opts.ttl): break
                         del entriesLst[:]
 
                 rule = RuleItem.initRule(src, tgt, probs)
@@ -85,7 +82,7 @@ class PhraseTable(object):
                 rule_obj.scoreRule()
                 PhraseTable.ruleDict[prev_src].append( rule_obj )
                 tgt_options += 1
-                if(self.ttl > 0 and tgt_options >= self.ttl): break
+                if(settings.opts.ttl > 0 and tgt_options >= settings.opts.ttl): break
             del entriesLst[:]
 
         finally:

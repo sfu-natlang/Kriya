@@ -40,7 +40,7 @@ class StatefulFeatures(object):
 
     @classmethod
     def initNew(cls, lm_heu):
-        return StatefulFeatures(StatefulFeatures.lmInitLst[:], 0.0, lm_heu)
+        return StatefulFeatures(StatefulFeatures.lmInitLst, 0.0, lm_heu)
 
     @classmethod
     def setLMInitLst(cls, tot_lm_feats):
@@ -63,20 +63,21 @@ class StatefulFeatures(object):
         # Aggregate the feature values of the stateful feats of antecendts with that of inference item
         for ante_sf_obj in anteSfLst:
             indx = 0
+            self.comp_score += ante_sf_obj.comp_score
             for ante_fval in ante_sf_obj.lmFVec:
                 self.lmFVec[indx] += ante_fval
                 indx += 1
 
-        # Now return the score of stateful features
-        return lmm.getLMScore(self.lmFVec)
+        return self.comp_score        # return stateful features score
 
     def getStateScore(self):
-        return self.lm_heu + lmm.getLMScore(self.lmFVec)
+        return self.comp_score + self.lm_heu
 
     def helperScore(self, newConsItems, is_last_cell):
-        (lm_comp_score, lm_comp_heu) = lmm.helperLM(newConsItems, is_last_cell, self.lmFVec)
-        self.comp_score += lm_comp_score
+        (frag_lm_score, lm_comp_heu) = lmm.helperLM(newConsItems, is_last_cell, self.lmFVec)
+        self.comp_score += frag_lm_score
         self.lm_heu = lm_comp_heu
+        return frag_lm_score + self.lm_heu
 
     def stringifyMembers(self, cand_hyp):
         return lmm.adjustUNKLMScore(cand_hyp, self.lmFVec)

@@ -58,31 +58,28 @@ class KENLangModel(object):
 
         return getHistory(self.LM, state)
 
-    def scorePhrnElide(self, wordsLst, e_len, mgramSpans, statesLst, r_lm_state):
-        '''Score all the complete m-grams in a given consequent item'''
+    def getLMState(self, r_edge_phr):
+        '''Get the forward looking state for current target hypothesis'''
+        r_lm_state = getEmptyState(self.LM)
+        dummy_prob = getNGramProb(self.LM, r_edge_phr, getEmptyState(self.LM), r_lm_state)    
+        return r_lm_state
 
-        lm_temp = 0.0
-        ## Get the forward looking state for current target hypothesis
-        if not settings.opts.no_lm_state and r_lm_state is None:
-            r_lm_state = getEmptyState(self.LM)
-            dummy_prob = getNGramProb(self.LM, ' '.join( wordsLst[e_len-self.lm_order:] ), getEmptyState(self.LM), r_lm_state)
+    def scoremGrams(self, phrStateTupLst):
+        '''Score all the complete m-grams in a given consequent item'''
 
         ## Score the complete n-gram phraes
         span_indx = 0
-        for (mgram_beg, mgram_end) in mgramSpans:
-            lm_hist = statesLst[span_indx]
+        lm_temp = 0.0
+        for (mgram_phr, lm_hist) in phrStateTupLst:
             if lm_hist is None:
-                lm_temp += getNGramProb(self.LM, ' '.join( wordsLst[mgram_beg:mgram_end] ), self.lm_order, 'true')
+                lm_temp += getNGramProb(self.LM, mgram_phr, self.lm_order, 'true')
             else:
-                lm_temp += getNGramProb(self.LM, ' '.join( wordsLst[mgram_beg:mgram_end] ), lm_hist, 'true')
+                lm_temp += getNGramProb(self.LM, mgram_phr, lm_hist, 'true')
             span_indx += 1
 
-        # Finally, elide the string again
-        e_tgt = ' '.join(wordsLst[0:self.lm_order-1] + [self.elider] + wordsLst[e_len-(self.lm_order-1):])
+        return lm_temp / KENLangModel.log_normalizer
 
-        return (lm_temp / KENLangModel.log_normalizer, e_tgt, r_lm_state)
-
-    def getLMHeuCost(self, e_tgt, wordsLst, e_len):
+    def getLMHeuCost(self, cons_item):
         """ Compute Heuristic LM score for a given consequent item (by merging one or two antecedents).
 
             Heuristic LM score is calculated for m-1 words in the beginning and end
@@ -93,27 +90,27 @@ class KENLangModel(object):
             then returned as the LM heuristic score.
         """
 
-        # Compute LM heuristic score for the first m-1 words
-        if (wordsLst[0] == "<s>"):                                  # Hypothesis is an S-rule (is_S_rule is True)
-            return getLMHeuProb(self.LM, ' '.join(wordsLst[1:self.lm_order-1]), 1, 0) / KENLangModel.log_normalizer
+        ## Compute LM heuristic score for the first m-1 words ##
+        # Hypothesis is an S-rule (is_S_rule is True)
+        if (cons_item.eTgtLst[0] == "<s>"):
+            return getLMHeuProb(self.LM, ' '.join(cons_item.eTgtLst[1:self.lm_order-1]), 1, 0) / KENLangModel.log_normalizer
 
-        if (e_len >= self.lm_order):                                # Hypothesis is *not* an S-rule (is_S_rule is False)
-            l_edge = ' '.join(wordsLst[0:self.lm_order-1])
-        else: l_edge = e_tgt
+        # Hypothesis is *not* an S-rule (is_S_rule is False)
+        if (cons_item.e_len < self.lm_order): l_edge = ' '.join(cons_item.eTgtLst)
+        else: l_edge = ' '.join(cons_item.eTgtLst[0:self.lm_order-1])
 
         left_edge_heu = getLeftEdgeHeu(self.LM, l_edge, 0)
         left_edge_heu_sbeg = getLeftEdgeHeu(self.LM, l_edge, 1)
         lmHeuLst = [left_edge_heu, left_edge_heu_sbeg, left_edge_heu]
 
         # Compute LM heuristic score for the last m-1 words
-        if wordsLst[-1] != "</s>":
-            if e_len < self.lm_order: phr_beg_indx = 0
-            else: phr_beg_indx = e_len - self.lm_order + 1
-            r_edge = ' '.join(wordsLst[phr_beg_indx:])
+        if cons_item.eTgtLst[-1] != "</s>":
+            if cons_item.e_len < self.lm_order: r_edge = l_edge
+            else: r_edge = ' '.join(cons_item.eTgtLst[1-self.lm_order:])    # Simpification of: -(self.lm_order - 1)
             right_edge_heu = getRightEdgeHeu(self.LM, r_edge, 0)
             right_edge_heu_send = getRightEdgeHeu(self.LM, r_edge, 1)
             lmHeuLst[0] += right_edge_heu
             lmHeuLst[1] += right_edge_heu
             lmHeuLst[2] += right_edge_heu_send
 
-        return max(lmHeuLst) / KENLangModel.log_normalizer                           # Return the max value of LM heu
+        return max(lmHeuLst) / KENLangModel.log_normalizer                  # Return the max value of LM heu

@@ -18,9 +18,6 @@ class Cell(object):
         self.has_S_tree = False
         self.sent_scored = False
 
-    def __del__(self):
-        del self.table
-
     def add2Cell(self, key, entryLst):
         '''Adds the derived entries along with the key in the corresponding cell of the table'''
 

@@ -13,6 +13,7 @@ from ruleItem import RuleItem
 # Global variables
 consObjsLst = []                # List of consequent-rule objects for a particular cell
 
+
 class Parse(object):
     '''Parse class contains method for parsing a given source sentence'''
 
@@ -35,11 +36,7 @@ class Parse(object):
     def __del__(self):
         '''Clear the data-structures'''
 
-        for chart_cell in Parse.chartDict.itervalues():
-            chart_cell = ''
         del Parse.chartDict
-        del self.wordsLst[:]
-        del self.refsLst[:]
 
     def parse(self):
         'Parse the sentence passed in the argument'
@@ -128,6 +125,7 @@ class Parse(object):
         if settings.opts.trace_rules > 0:
             #Parse.chartDict[(0, p_j)].trackRulesUsed('S')               # Track the rules used in the top-k translations
             Parse.chartDict[(0, p_j)].printTrace('S', self.sent)        # Prints the translation trace for the top-3 entries
+
         return 1
 
     def __getRuleSpans(self, i, j, span_phrase):
@@ -235,9 +233,9 @@ class Parse(object):
             if cell_type == 'X' and cube_depth_hier > cell_max_X_depth: cell_max_X_depth = cube_depth_hier
 
             # set the source side rule and span for the current cube
-            Lazy.setSourceInfo( merge_obj, cube_indx, rule, conseq_obj.spanTup, cube_depth_hier, self.refsLst )
+            merge_obj.setSourceInfo( cube_indx, rule, conseq_obj.spanTup, cube_depth_hier, self.refsLst )
             # add the consequent item to the cube as its first dimension
-            Lazy.add2Cube( merge_obj, cube_indx, ruleRHSLst )
+            merge_obj.add2Cube( cube_indx, ruleRHSLst )
 
             # add the rules for the sub-spans
             if rule.find('X__1') != -1 or rule.startswith('S__1'):  # process the rules having a non-terminal
@@ -250,11 +248,11 @@ class Parse(object):
                     # add the antecedent item(s) of the sub-spans in the derivation
                     s_span = conseq_obj.spanTup[s_indx]
                     s_depth = conseq_obj.depth1 if s_indx == 0 else conseq_obj.depth2
-                    Lazy.add2Cube( merge_obj, cube_indx, Parse.chartDict[s_span].getTupLst4NT(left_side, s_depth) )
+                    merge_obj.add2Cube( cube_indx, Parse.chartDict[s_span].getTupLst4NT(left_side, s_depth) )
                     s_indx += 1
             cube_indx += 1
 
-        tgtLst = Lazy.mergeProducts(merge_obj)
+        tgtLst = merge_obj.mergeProducts()
         self.__flush2Cell( span, (rule_nt, src_side), cell_max_X_depth, tgtLst)   # Flush the entries to the cell
         merge_obj = ''  # Important: This clears the mem-obj and calls the garbage collector on Lazy()
         del consObjsLst[:]

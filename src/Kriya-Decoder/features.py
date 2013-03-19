@@ -50,23 +50,17 @@ class StatefulFeatures(object):
     def copySFFeat(cls, other):
         return StatefulFeatures(other.lmFVec, other.comp_score)
 
-    def copyNScoreDiff(self, other):
-        lm_score_diff = lmm.copyLMScores(other.lmFVec, self.lmFVec)
-        self.lm_heu = other.lm_heu
-        self.comp_score += lm_score_diff
-        return lm_score_diff
+    @classmethod
+    def replicateSFFeat(cls, other):
+        return StatefulFeatures(other.lmFVec, other.comp_score, other.lm_heu)
 
     def getLMHeu(self):
         return self.lm_heu
 
-    def aggregFeatScore(self, anteSfLst):
-        # Aggregate the feature values of the stateful feats of antecendts with that of inference item
+    def aggregSFScore(self, anteSfLst):
+        '''Aggregates the stateful score of inf item by summing it with that of ante items'''
         for ante_sf_obj in anteSfLst:
-            indx = 0
             self.comp_score += ante_sf_obj.comp_score
-            for ante_fval in ante_sf_obj.lmFVec:
-                self.lmFVec[indx] += ante_fval
-                indx += 1
 
         return self.comp_score        # return stateful features score
 
@@ -74,10 +68,19 @@ class StatefulFeatures(object):
         return self.comp_score + self.lm_heu
 
     def helperScore(self, newConsItems, is_last_cell):
+        '''Helper function for computing stateful scores (recomputes lm_heu)'''
         (frag_lm_score, lm_comp_heu) = lmm.helperLM(newConsItems, is_last_cell, self.lmFVec)
         self.comp_score += frag_lm_score
         self.lm_heu = lm_comp_heu
         return frag_lm_score + self.lm_heu
+
+    def aggregFeatScore(self, ante_sf_obj):
+        '''Aggregates the stateful features for a given sf_obj pertaining to a final hypothesis'''
+
+        indx = 0
+        for ante_fval in ante_sf_obj.lmFVec:
+            self.lmFVec[indx] += ante_fval
+            indx += 1
 
     def stringifyMembers(self, cand_hyp):
         return lmm.adjustUNKLMScore(cand_hyp, self.lmFVec)

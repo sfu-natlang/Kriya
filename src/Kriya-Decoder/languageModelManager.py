@@ -82,8 +82,8 @@ class LanguageModelManager(object):
     def copyLMScores(cls, featVecSrc, featVecTgt):
         lm_score = 0.0
         for lm_indx in xrange( len(cls.lmWgts) ):
-            frag_lm_score = featVecSrc[lm_indx] - featVecTgt[lm_indx]
-            lm_score += (cls.lmWgts[lm_indx] * frag_lm_score)
+            #frag_lm_score = featVecSrc[lm_indx] - featVecTgt[lm_indx]
+            #lm_score += (cls.lmWgts[lm_indx] * frag_lm_score)
             featVecTgt[lm_indx] = featVecSrc[lm_indx]
 
         return lm_score

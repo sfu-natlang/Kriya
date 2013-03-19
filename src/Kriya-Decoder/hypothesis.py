@@ -24,39 +24,6 @@ class Hypothesis(object):
         self.bp = bp                                        # List of entry objects of the antecedents
         self.consItems = conseqItems[:]
 
-    def recombineEntry(self, hyp_w_LM):
-        '''Hypothesis recombination: LM info from an existing hypothesis is copied into a new hypothesis with better score'''
-
-        """
-        if settings.opts.debug:                                   # sanity check ...
-            assert (self.tgt == hyp_w_LM.tgt), \
-                "Error: Recombining hyp objects with diff targets: %s ||| %s" % (self.tgt, hyp_w_LM.tgt)
-        """
-
-        self.depth_hier = hyp_w_LM.depth_hier
-        self.inf_cell = hyp_w_LM.inf_cell
-        self.consItems = hyp_w_LM.consItems[:]
-
-        lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
-        self.score += self.sf_feat.lm_heu + lm_score_diff
-        return self.score
-
-    def copyLMInfo(self, hyp_w_LM):
-        '''Copy the language model information from an existing hypothesis to a new one with the same target'''
-
-        """
-        if settings.opts.debug:                                   # sanity check ...
-            assert (self.tgt == hyp_w_LM.tgt), \
-                "Error: Copying LM info bet hyp objects with diff targets: %s ||| %s" % (self.tgt, hyp_w_LM.tgt)
-        """
-
-        self.depth_hier = hyp_w_LM.depth_hier
-        self.consItems = hyp_w_LM.consItems[:]
-
-        lm_score_diff = self.sf_feat.copyNScoreDiff(hyp_w_LM.sf_feat)
-        self.score += self.sf_feat.lm_heu + lm_score_diff        
-        return self.score
-
     @classmethod
     def createFromRule(cls, r_item, span):
         return Hypothesis(r_item.score, r_item.src, r_item.tgt, StatefulFeatures.initNew(r_item.lm_heu), \
@@ -105,29 +72,31 @@ class Hypothesis(object):
         '''Return the feature values of the Hypothesis as a vector'''
 
         cand_hyp = self.getHypothesis()
-        sl_feat = self.compStatelessFeats()
-        feat_str = FeatureManager.formatFeatureVals(cand_hyp, sl_feat, self.sf_feat)
+        agg_sl_feat, agg_sf_feat = self.computeFeatures()
+        feat_str = FeatureManager.formatFeatureVals(cand_hyp, agg_sl_feat, agg_sf_feat)
         return [ float(x) for x in feat_str.split(' ') ]
 
     def printEntry(self):
         '''Prints the specific elements of the result'''
 
         cand_hyp = self.getHypothesis()
-        sl_feat = self.compStatelessFeats()
-        feat_str = FeatureManager.formatFeatureVals(cand_hyp, sl_feat, self.sf_feat)
+        agg_sl_feat, agg_sf_feat = self.computeFeatures()
+        feat_str = FeatureManager.formatFeatureVals(cand_hyp, agg_sl_feat, agg_sf_feat)
         return cand_hyp, feat_str
 
-    def compStatelessFeats(self):
-        sl_feat = StatelessFeatures.copySLFeat(self.inf_rule.sl_feat)
+    def computeFeatures(self):
+        agg_sl_feat = StatelessFeatures.copySLFeat(self.inf_rule.sl_feat)
+        agg_sf_feat = StatefulFeatures.replicateSFFeat(self.sf_feat)
         entryStack = [ent_obj for ent_obj in self.bp]
-        
+
         while entryStack:
             ent_obj = entryStack.pop(0)
-            sl_feat.aggregFeatScore(ent_obj.inf_rule.sl_feat)
+            agg_sl_feat.aggregFeatScore(ent_obj.inf_rule.sl_feat)
+            agg_sf_feat.aggregFeatScore(ent_obj.sf_feat)
             for bp_ent_obj in ent_obj.bp:
                 entryStack.append(bp_ent_obj)
 
-        return sl_feat
+        return agg_sl_feat, agg_sf_feat
 
     def printIt(self):
         '''Print the entry (for debugging purposes)'''

@@ -106,23 +106,12 @@ class Lazy(object):
 
             # add the neighbouring entries to the heap
             for mP_candTup in neighbours:
-                new_entry_obj = mP_candTup[1]
-                if new_entry_obj is None:
-                    new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
-                else:
-                    entry_exists = Lazy.checkHypothesis(new_entry_obj.tgt)
-                    if entry_exists is None:                        # New hypothesis; add to heap directly
-                        new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
+                if mP_candTup[1] is not None:
+                    entry_exists = Lazy.checkHypothesis(mP_candTup[1].tgt)
+                    if entry_exists is None:                        # New hypothesis, increment cbp
                         cb_pop_count += 1
-                    elif settings.opts.use_unique_nbest:            # Better than existing hypothesis; copy LM info from existing hyp
-                        curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Hypothesis.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2])
-                        new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
-                    else:
-                        curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Hypothesis.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2])
-                        new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
 
+                new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
                 heapq.heappush(mP_candLst, new_candTup)
                 candLst_size += 1
                 heap_indx += 1
@@ -139,19 +128,7 @@ class Lazy(object):
                 else: continue
 
                 for mP_candTup in diversityItems:
-                    new_entry_obj = mP_candTup[1]
-                    entry_exists = Lazy.checkHypothesis(new_entry_obj.tgt)
-                    if entry_exists is None:                        # New hypothesis; add to heap directly
-                        new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
-                    elif settings.opts.use_unique_nbest:            # Better than existing hypothesis; copy LM info from existing hyp
-                        curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Hypothesis.recombineEntry(new_entry_obj, self.coverageHeap[curr_h_indx][2])
-                        new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
-                    else:
-                        curr_h_indx = self.getItemIndxInHeap(entry_exists)
-                        score_w_lmHeu = Hypothesis.copyLMInfo(new_entry_obj, self.coverageHeap[curr_h_indx][2])
-                        new_candTup = (-score_w_lmHeu, heap_indx, new_entry_obj, mP_candTup[2], mP_candTup[3])
-
+                    new_candTup = (mP_candTup[0], heap_indx, mP_candTup[1], mP_candTup[2], mP_candTup[3])
                     heapq.heappush(self.coverageHeap, new_candTup)
                     heap_indx += 1
 
@@ -380,7 +357,7 @@ class Cube(object):
             -1 : Hyp was seen earlier but current one has a better score; create a new entry to replace the existing one
              0 : Hyp was seen earlier and has a poor score than the existing one; ignore this
         """
-        score_wo_LM = score - sf_f_obj.aggregFeatScore(anteSfFeats)
+        score_wo_LM = score - sf_f_obj.aggregSFScore(anteSfFeats)
         hyp_status = Lazy.getHypothesisStatus(tgt_hyp, score_wo_LM)
 
         """ Should we recombine hypothesis?
@@ -389,13 +366,11 @@ class Cube(object):
             i) the use_unique_nbest flag is False (add new hyp; but use the LM score of the existing one)
             ii) use_unique_nbest is True and the new hyp is better than the existing one.
         """
-        if ( hyp_status == -2 ):
+        if ( hyp_status == 0 and settings.opts.use_unique_nbest ):
+            entry_obj = None
+        else:
             score += sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
             entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
-                                   entriesLst[0], entriesLst[1:], newConsItems)
-        elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):
-            entry_obj = None
-        else: entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
-                                     entriesLst[0], entriesLst[1:])
+                                     entriesLst[0], entriesLst[1:], newConsItems)
 
         return (score, entry_obj)

@@ -370,7 +370,7 @@ class Cube(object):
             entry_obj = None
         else:
             score += sf_f_obj.helperScore(newConsItems, Lazy.is_last_cell)
-            entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, (), \
+            entry_obj = Hypothesis(score, self.src_side, tgt_hyp, sf_f_obj, self.depth_hier, Lazy.cell_span, \
                                      entriesLst[0], entriesLst[1:], newConsItems)
 
         return (score, entry_obj)

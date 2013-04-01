@@ -117,10 +117,10 @@ class Cell(object):
                 trace_entry = hypTraceStack.pop(0)
                 for back_pointer in trace_entry.bp:
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = trace_entry.inf_entry
-                if inf_entry is not None:
-                    src = inf_entry.src
-                    tgt = inf_entry.getHypothesis()
+                inf_rule = trace_entry.inf_rule
+                if inf_rule is not None:
+                    src = inf_rule.src
+                    tgt = inf_rule.tgt
                 else:
                     src = trace_entry.src
                     tgt = trace_entry.getHypothesis()
@@ -158,11 +158,11 @@ class Cell(object):
                 trace_entry = hypTraceStack.pop(0)
                 for back_pointer in trace_entry.bp:
                     hypTraceStack.insert(0, back_pointer)
-                inf_entry = trace_entry.inf_entry
-                if inf_entry is not None:   # Non-leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( inf_entry.src, Hypothesis.getHypothesis(inf_entry), Hypothesis.getFeatVec(inf_entry), trace_entry.inf_cell ) )
+                inf_rule = trace_entry.inf_rule
+                if inf_rule is not None:    # Non-leaf nodes in derivation
+                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( inf_rule.src, inf_rule.tgt, Hypothesis.getFeatVec(trace_entry), trace_entry.inf_cell ) )
                 else:                       # Leaf nodes in derivation
-                    tF.write( "%s ||| %s ||| %s ||| %s\n" % ( trace_entry.src, Hypothesis.getHypothesis(trace_entry), Hypothesis.getFeatVec(trace_entry), trace_entry.inf_cell ) )
+                    tF.write( "%s ||| %s ||| %s |||| %s\n" % ( trace_entry.src, Hypothesis.getHypothesis(trace_entry), Hypothesis.getFeatVec(trace_entry), trace_entry.inf_cell ) )
 
             tF.write("TRACE_END\n")
             nbest_cnt += 1

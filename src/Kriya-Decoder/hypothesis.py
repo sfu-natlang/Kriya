@@ -74,7 +74,7 @@ class Hypothesis(object):
         cand_hyp = self.getHypothesis()
         agg_sl_feat, agg_sf_feat = self.computeFeatures()
         feat_str = FeatureManager.formatFeatureVals(cand_hyp, agg_sl_feat, agg_sf_feat)
-        return [ float(x) for x in feat_str.split(' ') ]
+        return feat_str
 
     def printEntry(self):
         '''Prints the specific elements of the result'''

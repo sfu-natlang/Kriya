@@ -122,15 +122,16 @@ class LanguageModelManager(object):
                     lm_H = lm_obj.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
                 else:
                     lm_lprob = lm_obj.scoremGrams(cons_item.phrStateTupLst)
-                    lm_H = lm_obj.getLMHeuCost(cons_item)                
+                    lm_H = lm_obj.getLMHeuCost(cons_item)
 
             if ( is_last_cell ):                                 # lm_heu is added permanently in the last cell
-                lm_lprob += lm_H
+                if cons_item.new_elided_tgt: lm_lprob += lm_H
                 lm_H = 0.0
 
             lmFeatVec[lm_indx] += lm_lprob
-            tot_lm_score += (cls.lmWgts[lm_indx] * lm_lprob)     # LM score for the m-grams in this hypothesis
             tot_lm_heu += (cls.lmWgts[lm_indx] * lm_H)           # Heuristic LM score (pruning score is the sum of heuristic score and lm comp score so far)
+            if cons_item.new_elided_tgt:
+                tot_lm_score += (cls.lmWgts[lm_indx] * lm_lprob) # LM score for the m-grams in this hypothesis
             lm_indx += 1
 
         return (tot_lm_score, tot_lm_heu)
@@ -163,13 +164,14 @@ class LanguageModelManager(object):
 class ConsequentItem(object):
     """ Class for an Consequent Item (result of merging two antecendents)"""
 
-    __slots__ = "e_len", "r_lm_state", "eTgtLst", "phrStateTupLst"
+    __slots__ = "e_len", "r_lm_state", "eTgtLst", "phrStateTupLst", "new_elided_tgt"
 
     def __init__(self, goalTgt):
         self.e_len = 0
         self.r_lm_state = None
         self.eTgtLst = goalTgt[:]
         self.phrStateTupLst = []
+        self.new_elided_tgt = True
 
     def verify(self, lm_obj, anteItems):
         ''' Verifies the state object by printing the state (for debugging) '''
@@ -236,11 +238,13 @@ class ConsequentItem(object):
         tgtItems = []
         phrStateTupLst = []
         curr_state = None
+        old_e_tgt = ''
 
         for term in self.eTgtLst:
             if term == "X__1" or term == "S__1":
                 tgtItems.append( anteHyps[0] )
                 tempLst = anteItems[0].eTgtLst
+                old_e_tgt = ' '.join(anteItems[0].eTgtLst)
                 next_state = anteItems[0].r_lm_state
             elif term == "X__2":
                 tgtItems.append( anteHyps[1] )
@@ -275,5 +279,7 @@ class ConsequentItem(object):
         else:
             self.eTgtLst = eTgtLstNew
         self.e_len = len(self.eTgtLst)
+        if old_e_tgt == ' '.join(self.eTgtLst):
+            self.new_elided_tgt = False
 
         return ' '.join(tgtItems)

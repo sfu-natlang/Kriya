@@ -115,6 +115,7 @@ sub pp_lc_nd_tok {
     my $pl_scrpt;
     my $cmd;
     my $what_pp = "${src_or_tgt}_pp";
+    my $lc_in_dir = $cfg->{$step_dir};
 
     # Tokenize if the {src|tgt}_pp param specifies so
     if ($cfg->{$what_pp} =~ /tok/) {
@@ -122,15 +123,15 @@ sub pp_lc_nd_tok {
         $pl_scrpt = "$ENV{'SCRIPTS_ROOTDIR'}/tokenizer/tokenizer.perl";
         $cmd = "perl $pl_scrpt -l $cfg->{$src_or_tgt} < $cfg->{$step_dir}/$new_pre.$cfg->{$src_or_tgt} > $cfg->{$step_lc_dir}/$pre.tok.$cfg->{$src_or_tgt}";
         safeSystem($cmd);
+        $lc_in_dir = $cfg->{$step_lc_dir};
         $new_pre = "$pre.tok";
     }
-
 
     # Lower-case if the {src|tgt}_pp param specifies so
     if ($cfg->{$what_pp} =~ /lc/) {
         print "    ** $cfg->{$src_or_tgt} : Lower-casing turned on ...\n";
         $pl_scrpt = "$ENV{'SCRIPTS_ROOTDIR'}/tokenizer/lowercase.perl";
-        $cmd = "perl $pl_scrpt < $cfg->{$step_dir}/$new_pre.$cfg->{$src_or_tgt} > $cfg->{$step_lc_dir}/$new_pre.lc.$cfg->{$src_or_tgt}";
+        $cmd = "perl $pl_scrpt < $lc_in_dir/$new_pre.$cfg->{$src_or_tgt} > $cfg->{$step_lc_dir}/$new_pre.lc.$cfg->{$src_or_tgt}";
         safeSystem($cmd);
         $new_pre = "$new_pre.lc";
     }

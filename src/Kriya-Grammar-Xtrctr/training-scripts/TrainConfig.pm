@@ -71,6 +71,9 @@ sub set_defaults {
     if (!defined $self->{lm_order}) { $self->set_n_log("lm_order", 5); }
     if (!defined $self->{nbest_size}) { $self->set_n_log("nbest_size", 100); }
     if (!defined $self->{nbest_format}) { $self->set_n_log("nbest_format", True); }
+    if (!defined $self->{optimizer}) { $self->set_n_log("optimizer", "pro"); }
+    if (!defined $self->{opt_metric}) { $self->set_n_log("opt_metric", "bleu"); }
+    if (!defined $self->{opt_sampler}) { $self->set_n_log("opt_sampler", "rank"); }
     #if (!defined $self->{}) { $self->set_n_log("", ); }
 }
 

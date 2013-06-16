@@ -21,6 +21,12 @@ if (!-e $config_file) { die "Training config file $config_file does not exist. E
 my $cfg = TrainConfig->new($config_file);
 if (!defined $cfg->{TRAIN_DIR}) { die "ERROR: TRAIN_DIR parameter must be specified for Kriya model training. Exiting!\n"; }
 if (!-e $cfg->{LC_TRAIN_DIR}) { die "ERROR: $cfg->{LC_TRAIN_DIR} doesn't exist. Exiting!\n"; }
+    
+if (!defined $ENV{'PY_HOME'}) {
+    print STDERR "ERROR: Define an environment variable PY_HOME pointing to a top-level Python installation\n";
+    print STDERR "\tThe training script expects the python executable under $PY_HOME/bin\n";
+    exit(1);
+}
 &check_moses_path();
 
 # Directories
@@ -100,7 +106,7 @@ foreach my $set ( reverse( split(/,/, $cfg->{STEPS}) ) ) {
     else {
         my $lc_set = lc($set);
         my $set_pre = "${set}_PRE";
-        $currset_src = "$cfg->{$set_lc_dir}/$cfg->{$set_pre}.$src";
+        $currset_src = "$cfg->{$set_lc_dir}/$pre.$src";
         my $set_parts = &how_many_parts($currset_src, $cfg->{sent_per_file});
         if ($lc_set eq "dev") { $devset_split = $set_parts; }
         else { $testset_split = $set_parts; }
@@ -166,7 +172,7 @@ sub step_0 {
     # b. Split training data into smaller sets to extract scfg parallely
     $pstep_jobs = join(":", @idx_submitted);
     @idx_submitted = ();
-    my $split_cmd = "python $codeDir/pre-process/splitDataFile.py $cfg->{split_size} $outspan $phr_align_dir/moses/split-data";
+    my $split_cmd = "$PY_HOME/bin/python $codeDir/pre-process/splitDataFile.py $cfg->{split_size} $outspan $phr_align_dir/moses/split-data";
     writeCmd2File($split_scr, $split_cmd);
 
     safeSystem("qsub -l mem=1gb,walltime=1:00:00 -W depend=afterok:$pstep_jobs -N split_corpus $log_n_notify $split_scr >& $split_scr.log");
@@ -183,7 +189,7 @@ sub step_1 {
     my $one_NT = ($non_terms == 1) ? 'True' : 'False';
 
     $ph1_scr = "$scrptDir/phase1.sh";
-    $ph1_cmd = "python $codeDir/SCFGXtractor_ph1.py \$j $phr_align_dir/moses/split-data $rules_dir $fr_terms $one_NT";
+    $ph1_cmd = "$PY_HOME/bin/python $codeDir/SCFGXtractor_ph1.py \$j $phr_align_dir/moses/split-data $rules_dir $fr_terms $one_NT";
     writeCmd2File($ph1_scr, $ph1_cmd);
 
     # Multiple jobs should be submitted (one for each file in the split-set)
@@ -204,7 +210,7 @@ sub step_1b {
 
     # Multiple jobs should be submitted (one for each file in the split-set)
     print STDERR "Merging Tgt counts from files ...\n\n";
-    my $ph1b_cmd = "python $codeDir/mergeTgtCounts.py $rules_dir";
+    my $ph1b_cmd = "$PY_HOME/bin/python $codeDir/mergeTgtCounts.py $rules_dir";
     $ph1b_scr = "$scrptDir/phase1b.sh";
     my $ph1b_log = "$scrptDir/phase1b.log";
     writeCmd2File($ph1b_scr, $ph1b_cmd);
@@ -225,7 +231,7 @@ sub step_2 {
     safeSystem("mkdir $rules_dir/$currset-filtered");
 
     # Step-2a: Filter the generated SCFG rules for a given tuning/test set
-    my $ph2a_cmd = "python $codeDir/SCFGXtractor_ph2a.py $currset_src \$j $rules_dir $rules_dir/$currset-temp $fr_terms";
+    my $ph2a_cmd = "$PY_HOME/bin/python $codeDir/SCFGXtractor_ph2a.py $currset_src \$j $rules_dir $rules_dir/$currset-temp $fr_terms";
     writeCmd2File($ph2a_scr, $ph2a_cmd);
 
     for (my $i=1; $i<=$tot_files; $i++) {
@@ -239,7 +245,7 @@ sub step_2 {
     # Merge the filtered rule files and consolidate their counts; also compute forward & reverse lexical probs #
     $ph2b_scr = "$scrptDir/$set.phase2b.sh";
     @idx_submitted = ();
-    my $ph2b_cmd = "python $codeDir/SCFGXtractor_ph2b.py $rules_dir/$currset-temp $rules_dir/$currset-filtered $lex_dir/lex.f2e $lex_dir/lex.e2f";
+    my $ph2b_cmd = "$PY_HOME/bin/python $codeDir/SCFGXtractor_ph2b.py $rules_dir/$currset-temp $rules_dir/$currset-filtered $lex_dir/lex.f2e $lex_dir/lex.e2f";
     writeCmd2File($ph2b_scr, $ph2b_cmd);
 
     safeSystem("qsub -l mem=3gb,walltime=6:00:00 -W depend=afterok:$pstep_jobs -N $set-ph2b $log_n_notify $ph2b_scr >& $scrptDir/$set.phase2b.log");
@@ -256,7 +262,7 @@ sub step_2c {
     @idx_submitted = ();
 
     print STDERR "Filter the target rules relevant for a filtered set of rules ...\n\n";
-    my $ph2c_cmd = "python $codeDir/filterTgtCounts.py $rules_dir/tgt_rules.all.out $rules_dir/$currset-filtered/rules_cnt_align.out $rules_dir/$currset-filtered/tgt_rules.all.out";
+    my $ph2c_cmd = "$PY_HOME/bin/python $codeDir/filterTgtCounts.py $rules_dir/tgt_rules.all.out $rules_dir/$currset-filtered/rules_cnt_align.out $rules_dir/$currset-filtered/tgt_rules.all.out";
     $ph2c_scr = "$scrptDir/$set.phase2c.sh";
     writeCmd2File($ph2c_scr, $ph2c_cmd);
 
@@ -271,7 +277,7 @@ sub step_2c {
 sub step_3 {
     my $set = shift;
     $ph3_scr = "$scrptDir/$set.phase3.sh";
-    my $ph3_cmd = "python $codeDir/SCFGXtractor_ph3.py $rules_dir/$currset-filtered/rules_cnt_lprob.out rules_cnt.final.out";
+    my $ph3_cmd = "$PY_HOME/bin/python $codeDir/SCFGXtractor_ph3.py $rules_dir/$currset-filtered/rules_cnt_lprob.out rules_cnt.final.out";
     writeCmd2File($ph3_scr, $ph3_cmd);
 
     safeSystem("qsub -l mem=8gb,walltime=2:00:00 -W depend=afterok:$pstep_jobs -N $set-ph3 $log_n_notify $ph3_scr >& $scrptDir/$set.phase3.log");
@@ -293,7 +299,7 @@ sub step_4 {
     my $filt_rules_dir = "$model_dir/$currset-rules";
     safeSystem("mkdir $sent_dir");
     safeSystem("mkdir $filt_rules_dir");
-    my $ph4a_cmd = "python $cfg->{KRIYA_DEC}/pre-process/splitDataFile.py $currset_src $sent_dir $cfg->{sent_per_file}";
+    my $ph4a_cmd = "$PY_HOME/bin/python $cfg->{KRIYA_DEC}/pre-process/splitDataFile.py $currset_src $sent_dir $cfg->{sent_per_file}";
     writeCmd2File($ph4a_scr, $ph4a_cmd);
 
     safeSystem("qsub -l mem=2gb,walltime=1:00:00 -W depend=afterok:$pstep_jobs -N $set-ph4a $log_n_notify $ph4a_scr >& $scrptDir/$set.phase4a.log");
@@ -307,7 +313,7 @@ sub step_4 {
     @idx_submitted = ();
 
     my $py_scrpt = "$cfg->{KRIYA_DEC}/pre-process/sufTreeFilter.py";
-    my $ph4b_cmd = "python $py_scrpt \$j $rules_dir/$currset-filtered/rules_cnt.final.out $sent_dir $filt_rules_dir $fr_terms";
+    my $ph4b_cmd = "$PY_HOME/bin/python $py_scrpt \$j $rules_dir/$currset-filtered/rules_cnt.final.out $sent_dir $filt_rules_dir $fr_terms";
     writeCmd2File($ph4b_scr, $ph4b_cmd);
 
     for (my $i=1; $i<=$set_parts; $i++) {

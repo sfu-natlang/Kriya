@@ -4,7 +4,6 @@
 __author__="bsa33"
 __date__ ="$Feb 18, 2010 1:27:38 PM$"
 
-import codecs
 import os
 import sys
 import math
@@ -22,7 +21,7 @@ def loadTrie(ruleFile):
     prev_src = ''
 
     print 'Loading phrases from data file : %s ...\n' % ruleFile
-    with codecs.open(ruleFile, 'r', 'utf-8') as iF:
+    with open(ruleFile, 'r') as iF:
         for line in iF:
             line = line.strip()
 
@@ -44,7 +43,7 @@ def filterRules(dataFile):
     global MAX_PHR_LEN
     global srcRulesSet
 
-    with codecs.open(dataFile, 'r', 'utf-8') as rF:
+    with open(dataFile, 'r') as rF:
         print 'Filtering rules for file : %s ...\n' % dataFile
         for line in rF:
             line = line.strip()
@@ -68,8 +67,8 @@ def writeRules(ruleFile, tempOutFile):
     global srcRulesSet
 
     print 'Filtering rules from file : %s ...\n' % ruleFile
-    with codecs.open(tempOutFile, 'w', 'utf-8') as tF:
-        with codecs.open(ruleFile, 'r', 'utf-8') as rF:
+    with open(tempOutFile, 'w') as tF:
+        with open(ruleFile, 'r') as rF:
             for line in rF:
                 line = line.strip()
                 (src, _) = line.split(' ||| ', 1)

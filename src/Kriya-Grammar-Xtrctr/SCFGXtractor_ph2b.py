@@ -1,7 +1,6 @@
 ## Merge the filtered rule files and consolidates the rule counts from different files ##
 ## Also computes forward & reverse lexical probs ##
 
-import codecs
 import os
 import os.path
 import sys
@@ -18,7 +17,7 @@ def loadLexProbDistrib(lexDFile):
     global lexProbDict
     # The src & tgt lexemes and forward & reverse lexical probabilities are stored in dictionary as:
     # key: (src_word, tgt_word); value: (fwrd_lex_prob, rvrs_lex_prob)
-    lexF = codecs.open(lexDFile, 'r', 'utf-8')
+    lexF = open(lexDFile, 'r')
     for line in lexF:
         line = line.strip()
         src, tgt, f_prob, r_prob = line.split(' ||| ')
@@ -33,7 +32,7 @@ def loadFwrdLexProbDistrib(lexDFile):
     # The src & tgt lexemes and forward & reverse lexical probabilities are stored in dictionary as:
     # key: (src_word, tgt_word); value: (fwrd_lex_prob, rvrs_lex_prob)
     # Only forward lex prob is stored in lexProbDict now and reverse lex prob is updated later by loadRvrsLexProbDistrib()
-    lexF = codecs.open(lexDFile, 'r', 'utf-8')
+    lexF = open(lexDFile, 'r')
     line_cnt = 0
     for line in lexF:
         line = line.strip()
@@ -53,7 +52,7 @@ def loadRvrsLexProbDistrib(lexDFile):
     print 'Loading reverse lexical probability distribution ...'
     global lexProbDict
     # Updates the lexProbDict with correct reverse lex prob
-    lexF = codecs.open(lexDFile, 'r', 'utf-8')
+    lexF = open(lexDFile, 'r')
     line_cnt = 0
     for line in lexF:
         line = line.strip()
@@ -83,9 +82,9 @@ def read_n_merge(fileLst, outFile1, outFile2):
     stop_iteration = False
 
     print "Reading rules and merging their counts & alignments ..."
-    fHLst = [ codecs.open(file, 'r', 'utf-8') for file in fileLst ]
-    oF1 = codecs.open(outFile1, 'w', 'utf-8')
-    oF2 = codecs.open(outFile2, 'w', 'utf-8')
+    fHLst = [ open(file, 'r') for file in fileLst ]
+    oF1 = open(outFile1, 'w')
+    oF2 = open(outFile2, 'w')
     while True:
         stop_iteration = True
         for f_track in fileTrackLst:

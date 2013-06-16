@@ -5,7 +5,6 @@
 __author__="Baskaran Sankaran, Majid Razmara"
 __date__ ="$Aug 15, 2010 3:27:38 PM$"
 
-import codecs
 import sys
 
 tgtSet = set([])
@@ -15,7 +14,7 @@ def loadTgtDict(filtRuleFile):
     global tgtSet
     tgt_rule_cnt = 0
     print 'Loading target rules from filtered rules file : %s ...\n' % filtRuleFile
-    with codecs.open(filtRuleFile, 'r', 'utf-8') as rF:
+    with open(filtRuleFile, 'r') as rF:
         for line in rF:
             line = line.strip()
             (_, tgt, _) = line.split(' ||| ', 2)
@@ -29,8 +28,8 @@ def getTgtCnts(tgtFile, tempTgtFile):
 
     global tgtSet
     print 'Filtering target counts from : %s into : %s ...\n' % (tgtFile, tempTgtFile)
-    with codecs.open(tempTgtFile, 'w', 'utf-8') as oF:
-        with codecs.open(tgtFile, 'r', 'utf-8') as tF:
+    with open(tempTgtFile, 'w') as oF:
+        with open(tgtFile, 'r') as tF:
             for line in tF:
                 line = line.strip()
                 (tgt, _) = line.split(' ||| ', 1)

@@ -1,7 +1,6 @@
 ## This program is the phase-III of the SCFG rules extraction ##
 ## It estimates the forward (P(s|t)) and reverse (P(t|s)) probabilities using relative frequency estimation ##
 
-import codecs
 import os
 import sys
 import heapq
@@ -24,7 +23,7 @@ def loadTgtCnts(tgtFile):
     tgtCntDict = {}
 
     print "Reading target counts and loading the counts in a dict ..."
-    rF = codecs.open(tgtFile, 'r', 'utf-8')
+    rF = open(tgtFile, 'r')
     t_beg = time.time()
     while True:
         line = rF.readline()
@@ -57,8 +56,8 @@ def writeFeats(ruleFile, outFile):
     rulesLst = []
 
     print "\n\nComputing source cnt and feature values before writing them to file ..."
-    rF = codecs.open(ruleFile, 'r', 'utf-8')
-    oF = codecs.open(outFile, 'w', 'utf-8')
+    rF = open(ruleFile, 'r')
+    oF = open(outFile, 'w')
     t_beg = time.time()
     while True:
         line = rF.readline()

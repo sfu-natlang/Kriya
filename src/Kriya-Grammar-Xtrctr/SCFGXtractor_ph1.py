@@ -1,6 +1,5 @@
 ## This program extracts a Synchronous CFG rules from the word alignments of a parallel corpus ##
 
-import codecs
 import sys
 
 # Constants
@@ -37,7 +36,7 @@ def readPhraseSpan(spanFile, outFile, tgtFile):
     tgt_span = []
 
     print "Reading the span file :", spanFile
-    inF = codecs.open(spanFile, 'r', 'utf-8')
+    inF = open(spanFile, 'r')
     for line in inF:
         line = line.strip()
         if line.startswith('LOG: SRC: '):             # Read the source sentence
@@ -111,14 +110,14 @@ def readPhraseSpan(spanFile, outFile, tgtFile):
     inF.close()
 
     # Write the rule counts, forward and reverse alignments to files
-    with codecs.open(outFile, 'w', 'utf-8') as oF:
+    with open(outFile, 'w') as oF:
         for rule in sorted( ruleIndxCntDict.iterkeys() ):
             r_indx, rule_count = ruleIndxCntDict[rule]
             f_alignments = ' ## '.join( fAlignDoD[r_indx].keys() )
             r_alignments = ' ## '.join( rAlignDoD[r_indx].keys() )
             oF.write( "%s ||| %g ||| %s ||| %s\n" % (rule, rule_count, r_alignments, f_alignments) )
 
-    with codecs.open(tgtFile, 'w', 'utf-8') as tF:
+    with open(tgtFile, 'w') as tF:
         for tgt in sorted( tgtCntDict.iterkeys() ):
             tF.write( "%s ||| %g\n" % (tgt, tgtCntDict[tgt]) )
 

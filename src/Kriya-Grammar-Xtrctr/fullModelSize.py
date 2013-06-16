@@ -3,7 +3,6 @@
 ## Thus the full (without filtering) model size is neven known. ##
 ## This program finds the full model size without explicitly extracting it. ##
 
-import codecs
 import os
 import sys
 import time
@@ -22,7 +21,7 @@ def read_n_merge(fileLst):
     stop_iteration = False
 
     print "Reading rules and finding the total model size ..."
-    fHLst = [ codecs.open(file, 'r', 'utf-8') for file in fileLst ]
+    fHLst = [ open(file, 'r') for file in fileLst ]
     while True:
         stop_iteration = True
         for f_track in fileTrackLst:

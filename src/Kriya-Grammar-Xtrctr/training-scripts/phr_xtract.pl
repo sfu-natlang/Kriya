@@ -50,6 +50,12 @@ if (defined $cfg->{TRAIN_DIR}) {
 }
 
 sub check_modules {
+    if (!defined $ENV{'PY_HOME'}) {
+        print STDERR "ERROR: Define an environment variable PY_HOME pointing to a top-level Python installation\n";
+        print STDERR "\tThe training script expects the python executable under $PY_HOME/bin\n";
+        exit(1);
+    }
+
     if (!defined $ENV{'GIZA_DIR'} || !defined $ENV{'MOSES_DIR'} || !defined $ENV{'SCRIPTS_ROOTDIR'}) {
         print STDERR "ERROR: Three env variables, GIZA_DIR, MOSES_DIR, SCRIPTS_ROOTDIR must be set. One or more of them are undefined.\n";
         print STDERR "\tPlease load Giza and Moses/SVN_20101028 modules before launching $0. Exiting!\n";
@@ -100,7 +106,7 @@ sub pp_clean_corpus {
 
     print "    ** Cleaning corpus turned on ...\n";
     my $py_scrpt = "$cfg->{KRIYA_PXTR}/pre-process/clean_corpus.py"; 
-    my $cmd = "/usr/bin/python $py_scrpt $cfg->{$step_dir} $cfg->{$step_lc_dir} $pre $cfg->{src} $cfg->{tgt} $cfg->{max_sent_len}";
+    my $cmd = "$PY_HOME/bin/python $py_scrpt $cfg->{$step_dir} $cfg->{$step_lc_dir} $pre $cfg->{src} $cfg->{tgt} $cfg->{max_sent_len}";
     safeSystem($cmd);
     return "$pre.cln";
 }

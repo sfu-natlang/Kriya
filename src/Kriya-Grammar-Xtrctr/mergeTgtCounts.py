@@ -1,6 +1,5 @@
 ## Consolidates the target sides of all rules along eith their counts ## 
 
-import codecs
 import os
 import sys
 import heapq
@@ -17,8 +16,8 @@ def readNMerge(fileLst, outFile):
     fileTrackLst = [ 1 for file in fileLst ]
 
     print "Reading target side rules and consolidating their counts ..."
-    fHLst = [ codecs.open(file, 'r', 'utf-8') for file in fileLst ]
-    oF = codecs.open(outFile, 'w', 'utf-8')
+    fHLst = [ open(file, 'r') for file in fileLst ]
+    oF = open(outFile, 'w')
     while True:
         if stop_iteration:
             break

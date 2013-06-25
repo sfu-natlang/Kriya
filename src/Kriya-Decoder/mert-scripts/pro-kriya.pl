@@ -703,11 +703,8 @@ sub create_config {
         if (exists $kriyaFeatsHsh{$parameter}) {
             $shortname = $kriyaFeatsHsh{$parameter};
             if (exists $kriyaWgtsHsh{$shortname}) {
-                @newweights = split(/\s+/, $kriyaWgtsHsh{$shortname});
-                foreach my $new_wgt (@newweights) {
-                    print OUT "$new_wgt\n";
-                    $line = <INI>;
-                }
+                print OUT "$kriyaWgtsHsh{$shortname}\n";
+                $line = <INI>;
             }
             else { die "ERROR: Feature $parameter having shortname $shortname doesn't have corresponding weight(s). Exiting!!\n"; }
             next;

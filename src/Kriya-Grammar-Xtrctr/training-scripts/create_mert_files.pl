@@ -91,7 +91,7 @@ sub create_config {
 
     print INI "# Various feature weights\n";
     print INI "# language model weights\n[weight_lm]\n1.0\n\n";
-    print INI "# translation model weights\n[weight_tm]\n1.066893\n0.752247\n0.589793\n0.589793\n1.0\n\n";
+    print INI "# translation model weights\n[weight_tm]\n1.066893 0.752247 0.589793 0.589793 1.0\n\n";
     print INI "# word penalty\n[weight_wp]\n-2.844814\n\n";
     print INI "# glue weight\n[weight_glue]\n1.0\n\n";
 

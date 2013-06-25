@@ -918,9 +918,11 @@ sub create_config {
 	# change parameter, if new values
 	if (defined($P{$parameter})) {
 	    # write new values
-	    foreach (@{$P{$parameter}}) {
-		print OUT $_."\n";
-	    }
+        my $new_wgt_str = join(" ", @{$P{$parameter}});
+	    #foreach (@{$P{$parameter}}) {
+		#print OUT $_."\n";
+	    #}
+        print OUT "$new_wgt_str\n";
 	    delete($P{$parameter});
 	    # skip until new parameter, only write comments
 	    while($line = <INI>) {

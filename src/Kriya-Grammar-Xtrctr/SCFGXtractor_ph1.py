@@ -3,20 +3,23 @@
 import sys
 
 # Constants
-MAX_PHR_LEN = 10                  # Maximum phrase length
-TOT_TERMS = 5                     # Total no of terms (terminals & non-terminals incl) in source rule
+max_phr_len = 10              # Maximum phrase length
+tot_src_terms = 7             # Total no of terms (terminals & non-terminals incl) in source side
+X1_only = False               # Flag for deciding whether to generate one non-termianl or two non-terminal rules
+weight_rules = False          # When distributing the unit-count among the rules, should it be weighted by the # of rule occurrences
+tight_phrases_only = True     # Restrict the rule extraction strictly to tighter phrases
 
 # Global Variables
 rule_indx = 1
 tot_rules_derived = 0
-X1_only = False                   # Flag for deciding whether to generate one non-termianl or two non-terminal rules
 
+srcWrds = []
+tgtWrds = []
 ruleDict = {}
-alignDoD = {}                     # Dictionary for storing forward alignments
-revAlignDoD = {}                  # Dictionary for storing reverse alignments
+alignDoD = {}
+revAlignDoD = {}
 sentInitDoD = {}
-sentTempDict = {}
-sentFinalDict = {}
+ppairRulesSet = set([])
 
 tgtCntDict = {}
 ruleIndxCntDict = {}
@@ -27,13 +30,11 @@ rAlignDoD = {}
 def readPhraseSpan(spanFile, outFile, tgtFile):
     'Reads the input phrase span file for src & tgt sentences, alignment and initial phrases'
 
-    global ruleIndxCntDict, tgtCntDict
+    global tight_phrases_only
+    global ruleDict, ruleIndxCntDict, tgtCntDict
+    global srcWrds, tgtWrds
     sent_count = 0
-    srcWrds = []
-    tgtWrds = []
     phrLst = []
-    src_span = []
-    tgt_span = []
 
     print "Reading the span file :", spanFile
     inF = open(spanFile, 'r')
@@ -59,53 +60,46 @@ def readPhraseSpan(spanFile, outFile, tgtFile):
                 except KeyError:
                     revAlignDoD[m[1]] = {}
                     revAlignDoD[m[1]][m[0]] = 1
-        elif (line.split()[0]).isdigit():             # Read the initial phrase pairs (produced by moses script)
-            phrLst = []
-            src_span = []
-            tgt_span = []
-            for temp in line.split():
-                phrLst += [int(temp)]
-
-            # If the boundary term of source or target phrase has an unaligned word, ignore the phrase-pair
-            # Earlier bug fixed on March '09
-            if ( not alignDoD.has_key( str(phrLst[0]) ) or not revAlignDoD.has_key( str(phrLst[2]) ) or
-                 not alignDoD.has_key( str(phrLst[1]) ) or not revAlignDoD.has_key( str(phrLst[3]) ) ):
-                continue
-
-            src_len = phrLst[1] - phrLst[0] + 1      # Find length of source phrase and its span
-            src_span = ' '.join( map( lambda x: str(x), range(phrLst[0], phrLst[1]+1) ) )
-            tgt_len = phrLst[3] - phrLst[2] + 1      # Find length of target phrase and its span
-            tgt_span = ' '.join( map( lambda x: str(x), range(phrLst[2], phrLst[3]+1) ) )
-
-            # Creating a dict of dict for storing source and target spans
-            src_spanTuple = ()
-            init_phr_pair = ()
-            src_spanTuple = (phrLst[0], phrLst[1])
-            init_phr_pair = (src_span, tgt_span)
-            try:
-                sentInitDoD[src_len][init_phr_pair] = 1
-            except KeyError:
-                sentInitDoD[src_len] = {}
-                sentInitDoD[src_len][init_phr_pair] = 1
+        elif line.startswith('LOG: PHRASES_BEGIN:'): continue
         elif line.startswith('LOG: PHRASES_END:'):    # End of the current sentence; now extract rules from it
             xtractRules()
 
             # For every extracted rule call the function compFeatureCounts() to:
             #   i. convert the word positions in the rules into lexical entries, and
             #   ii. find the alignment for the rule and compute the joint count p(s, t)
-            for rPS_rule in ruleDict.keys():
-                compFeatureCounts(rPS_rule, srcWrds, tgtWrds)
+            for rule in ruleDict.keys(): compFeatureCounts(rule)
 
             # Clear the variables at the end of current sentence
-            srcWrds = []
-            tgtWrds = []
             alignDoD.clear()
             revAlignDoD.clear()
             ruleDict.clear()
             sentInitDoD.clear()
             sent_count += 1
-            if sent_count % 2000 == 0:
+            if sent_count % 1000 == 0:
                 print "Sentences processed : %6d ..." % sent_count
+        else:
+            unaligned_edge = False
+            phrLst = [ int(x) for x in line.split() ]
+
+            # If the boundary term of source or target phrase has an unaligned word, ignore the phrase-pair
+            # Earlier bug fixed on March '09
+            # Unless the tight-phrase options is set to False
+            if not alignDoD.has_key( str(phrLst[0]) ) or not revAlignDoD.has_key( str(phrLst[2]) ) or \
+                 not alignDoD.has_key( str(phrLst[1]) ) or not revAlignDoD.has_key( str(phrLst[3]) ):
+                if tight_phrases_only: continue
+                else: unaligned_edge = True
+
+            sphr_len = phrLst[1] - phrLst[0] + 1      # Find length of source phrase and its span
+            init_phr_pair = (' '.join( [str(x) for x in xrange(phrLst[0], phrLst[1]+1) ] ), \
+                             ' '.join( [str(x) for x in xrange(phrLst[2], phrLst[3]+1)] ) )
+            if unaligned_edge:
+                ruleDict[init_phr_pair] = 1.0
+                continue
+
+            # Create a dict of dict for storing initial phrase pairs (tuples of source and target spans)
+            if not sentInitDoD.has_key(sphr_len):
+                sentInitDoD[sphr_len] = {}
+            sentInitDoD[sphr_len][init_phr_pair] = 1
 
     inF.close()
 
@@ -125,287 +119,246 @@ def readPhraseSpan(spanFile, outFile, tgtFile):
 
 
 def xtractRules():
-    '''Extracts the rules from the alignments of a sentence'''
+    ''' Extract the rules for different phrase lengths (from smallest to longest) '''
 
-    for xR_phr_len in range(MAX_PHR_LEN, 1, -1):
-        if sentInitDoD.has_key(xR_phr_len):
-            check4Subphrase(xR_phr_len)
+    for sphr_len in xrange(max_phr_len, 1, -1):
+        if sentInitDoD.has_key(sphr_len):
+            check4Subphrase(sphr_len)
 
-    # Handling the rules where the length of source side is 1
-    if sentInitDoD.has_key(1):
-        for xR_rule in sentInitDoD[1]:
-            if ruleDict.has_key(xR_rule):
-                ruleDict[xR_rule] += 1.0
-            else:
-                ruleDict[xR_rule] = 1.0
-#            print '%15s %15s : %g' % (xR_rule[0], xR_rule[1], ruleDict[xR_rule])
+    # Handle the rules of length (source side) 1
+    sphr_len = 1
+    if sentInitDoD.has_key(sphr_len):
+        for init_phr_pair in sentInitDoD[sphr_len]:
+            if ruleDict.has_key(init_phr_pair): ruleDict[init_phr_pair] += 1.0
+            else: ruleDict[init_phr_pair] = 1.0
+            #sys.stderr.write('    %s ||| %s ||| %g\n' % (init_phr_pair[0], init_phr_pair[1], ruleDict[init_phr_pair]))
 
 
-def check4Subphrase(c4Sp_phr_len):
+def check4Subphrase(sphr_len):
 
-    global TOT_TERMS
-    global X1_only
-    global tot_rules_derived
-    for c4Sp_phr_pair in sentInitDoD[c4Sp_phr_len].keys():
-        c4Sp_spanTuple = sentInitDoD[c4Sp_phr_len][c4Sp_phr_pair]
-        c4Sp_s_span = c4Sp_phr_pair[0]
-        c4Sp_t_span = c4Sp_phr_pair[1]
+    global tot_src_terms, X1_only, tot_rules_derived
+    global ppairRulesSet
+    ppairRulesDict = {}
 
-        # Use the global variable for counting the number of rules derived
-        tot_rules_derived = 0
+    for phr_pair in sentInitDoD[sphr_len].keys():
+        rule_cnt = 0.0
+        tot_rules_derived = 0           # Clear the global variables for every phrase-pair
+        ppairRulesSet.clear()
+        ppairRulesDict.clear()
 
-        c4Sp_rulesLst = []
-        sentTempDict.clear()
-        sentFinalDict.clear()
+        # Constraint: Rules are limited to seven non-terminals and terminals on source side
+        # Initial phrase pairs having less than TOT_TERMS (default 7) terms in source side are added to the set of rules
+        if sphr_len <= tot_src_terms:
+            tot_rules_derived += 1
+            if ppairRulesDict.has_key(phr_pair): ppairRulesDict[phr_pair] += 1
+            else: ppairRulesDict[phr_pair] = 1
 
-        # Constraint: Rules are limited to five non-terminals and terminals on source side
-        # Initial phrase pairs having less than TOT_TERMS (default 5) terms in source side are added with weight 1.0
-        if len(c4Sp_s_span.split()) <= TOT_TERMS:
-            sentFinalDict[c4Sp_phr_pair] = 1
+        # Do a breadth-first search: extract all possible rules for the given initial phrase pair
+        iterateInitPhrPairs(sphr_len, phr_pair)
+        while ppairRulesSet:
+            sub_phr_pair = ppairRulesSet.pop()
+            sub_s_span, sub_t_span = sub_phr_pair
+            sub_phr_slen = len( sub_s_span.split() )
 
-        # Do a breadth first search: search for all possible rules for a given initial phrase pair
-        iterateInitPhrPairs(c4Sp_phr_len, c4Sp_s_span, c4Sp_t_span)
-        c4Sp_rulesLst = sentTempDict.keys()
-        while len(c4Sp_rulesLst) > 0:
-            c4Sp_sub_phr_pair = c4Sp_rulesLst[0]
-
-            c4Sp_s_span = c4Sp_sub_phr_pair[0]
-            c4Sp_t_span = c4Sp_sub_phr_pair[1]
-            srcRuleTerms = []
-            srcRuleTerms = c4Sp_s_span.split()
-            c4Sp_sub_phr_len = len( srcRuleTerms )
+            if sub_phr_slen <= tot_src_terms:
+                if ppairRulesDict.has_key(sub_phr_pair): ppairRulesDict[sub_phr_pair] += 1
+                else: ppairRulesDict[sub_phr_pair] = 1
 
             # Constraint-1: Check if the source span already has 2 nonterminals, then do not process it further
-            if (X1_only and c4Sp_s_span.find('X__1') != -1) or (c4Sp_s_span.find('X__1') != -1 and c4Sp_s_span.find('X__2') != -1):
+            if (X1_only and sub_s_span.find('X__1') != -1) or (sub_s_span.find('X__2') != -1):
                 pass
             # If the source span has 1 non-terminal, but further simplification is not possible
-            elif c4Sp_s_span.find('X__1') != -1 and not isRuleDecomposable( srcRuleTerms ):
+            elif sub_s_span.find('X__1') != -1 and not isRuleDecomposable( sub_s_span ):
                 pass
             else:
-                iterateInitPhrPairs(c4Sp_sub_phr_len, c4Sp_s_span, c4Sp_t_span)
+                iterateInitPhrPairs(sub_phr_slen, sub_phr_pair)
 
-            if len(c4Sp_s_span.split()) <= TOT_TERMS:
-                sentFinalDict[c4Sp_sub_phr_pair] = 0
-            c4Sp_junk_considered = sentTempDict.pop(c4Sp_sub_phr_pair)
-            c4Sp_rulesLst = []
-            c4Sp_rulesLst = sentTempDict.keys()
+        # Distribute the unit count for each initial phrase-pair equally among the rules extracted from it
+        if tot_rules_derived > 0: rule_cnt = 1.0/ tot_rules_derived
 
-        if tot_rules_derived > 0:
-            c4Sp_rule_prob = float( 1.0 / tot_rules_derived )
-        else:
-            c4Sp_rule_prob = 0.0
-#        c4Sp_rule_prob = 1.0 / len( sentFinalDict.keys() )
-
-        for c4Sp_rule in sentFinalDict.keys():
-            # Initial phrase-pairs having weight '1' are added with 'unit' counts
-            if sentFinalDict[c4Sp_rule] == 1:
-                if ruleDict.has_key(c4Sp_rule):
-                    ruleDict[c4Sp_rule] += 1.0
-                else:
-                    ruleDict[c4Sp_rule] = 1.0
-
-            # Derived phrase-pairs having fractional weights are added fractional counts
-            if ruleDict.has_key(c4Sp_rule):
-                ruleDict[c4Sp_rule] += c4Sp_rule_prob
-            else:
-                ruleDict[c4Sp_rule] = c4Sp_rule_prob
-#            print '%15s %15s : %g' % (c4Sp_rule[0], c4Sp_rule[1], ruleDict[c4Sp_rule])
-
-        # Clear the dictionaries again to reduce the memory usage
-        sentTempDict.clear()
-        sentFinalDict.clear()
+        # Weight each rule by the number of times it was observed
+        for rule in ppairRulesDict.keys():
+            weighted_cnt = rule_cnt
+            if weight_rules: weighted_cnt *= ppairRulesDict[rule]
+            if ruleDict.has_key(rule): ruleDict[rule] += weighted_cnt
+            else: ruleDict[rule] = weighted_cnt
+            #sys.stderr.write('    %s ||| %s ||| %g ||| %d\n' % (rule[0], rule[1], ruleDict[rule], ppairRulesDict[rule]))
 
 
-def isRuleDecomposable( iRD_srcRuleTerms ):
+def isRuleDecomposable( s_span ):
 
-    iRD_last_indx = len( iRD_srcRuleTerms ) - 1
-    for iRD_term_indx, iRD_term in enumerate( iRD_srcRuleTerms ):
-        if iRD_term == 'X__1':
-            ## For a rule to be decomposable further it should have at least one-terminal word on
-            ## either side of X__1, which can be written by X__2. Note that the two non-terminals can not
-            ## occur next to each other in source side and so there should be at least one word in between.
-            if ( iRD_term_indx >= 2 or iRD_last_indx - iRD_term_indx >= 2 ):
-                return True
-            else: return False
-
-    if iRD_last_indx > 0: return True       # decide for a terminal rule that doesn't have 'X__1'
-    else: return False
+    srcRuleTerms = s_span.split()
+    try:
+        term_indx = srcRuleTerms.index('X__1')
+        if term_indx >= 2 or (len(srcRuleTerms) - 1 - term_indx) >= 2:
+            return True
+        else: return False
+    except ValueError:
+        if srcRuleTerms: return True       # decide for a terminal rule that doesn't have 'X__1'
+        else: return False
 
 
-def iterateInitPhrPairs(iIPP_phr_len, iIPP_s_span, iIPP_t_span):
+def iterateInitPhrPairs(sphr_len, (s_span, t_span)):
     global tot_rules_derived
-    for iIPP_sub_phr_len in range(iIPP_phr_len-1, 0, -1):
+    global ppairRulesSet
+    for sub_phr_slen in xrange(sphr_len-1, 0, -1):
+        if not sentInitDoD.has_key(sub_phr_slen): continue
 
-        if sentInitDoD.has_key(iIPP_sub_phr_len):
+        for sub_phr_pair in sentInitDoD[sub_phr_slen].keys():
+            # Process the rule further only if its span is compatible to that of the target rule
+            subSpanTuple = sentInitDoD[sub_phr_slen][sub_phr_pair]
 
-            for iIPP_sub_phr_pair in sentInitDoD[iIPP_sub_phr_len].keys():
-                # Process the rule further only if its span is compatible to that of the target rule
-                iIPP_subSpanTuple = sentInitDoD[iIPP_sub_phr_len][iIPP_sub_phr_pair]
+            # Check constraint-2: The given phrases are sub-phrases of source and target spans
+            src_side_compatible = checkRuleCompatibility(s_span, sub_phr_pair[0])
+            tgt_side_compatible = checkRuleCompatibility(t_span, sub_phr_pair[1])
+            if src_side_compatible and tgt_side_compatible:
+                sub_s_span, sub_t_span = sub_phr_pair
 
-                # Check constraint-2: The given phrases are sub-phrases of source and target spans
-                src_side_compatible = checkRuleCompatibility(iIPP_s_span, iIPP_sub_phr_pair[0])
-                tgt_side_compatible = checkRuleCompatibility(iIPP_t_span, iIPP_sub_phr_pair[1])
-                if src_side_compatible and tgt_side_compatible:
-                    iIPP_sub_s_span = iIPP_sub_phr_pair[0]
-                    iIPP_sub_t_span = iIPP_sub_phr_pair[1]
-                    
-                    # If the sub spans are compatible with the given src & tgt spans then,
-                    # compose the new rule. If the new rule satisfies filtering constraints then,
-                    # it is added to the sentTempDict towards count
-                    iIPP_rule = ''
-                    iIPP_rule = checkConstraints(iIPP_s_span, iIPP_t_span, iIPP_sub_s_span, iIPP_sub_t_span)
-                    if len(iIPP_rule) > 1:
-                        sentTempDict[iIPP_rule] = 0
+                # If the sub spans are compatible with the given src & tgt spans then,
+                # compose the new rule. If the new rule satisfies filtering constraints then,
+                # it is added to the ppairRulesSet towards count
+                rule = checkConstraints(s_span, t_span, sub_s_span, sub_t_span)
+                if rule is not None:
+                    ppairRulesSet.add(rule)
 
-                    # Count all the rules derived so far, including those not satisfying filtering constraints
-                    tot_rules_derived += 1
+                # Count all the rules derived so far, including those not satisfying filtering constraints
+                tot_rules_derived += 1
 
 
-def checkRuleCompatibility(cRC_rule, cRC_sub_rule):
+def checkRuleCompatibility(rule, sub_rule):
     'Checks if the sub phrase is compatible with the bigger rule (for both src & tgt rules)'
 
-    cRC_rule_compatible = False
-    cRC_l_pad = ' ' + cRC_sub_rule          # Pad the string with a space on left side
-    cRC_r_pad = cRC_sub_rule + ' '          # Pad the string with a space on right side
-    cRC_b_pad = ' ' + cRC_sub_rule + ' '    # Pad the string with a space on either sides
+    #l_pad = ' ' + sub_rule          # Pad the string with a space on left side
+    #r_pad = sub_rule + ' '          # Pad the string with a space on right side
+    #b_pad = ' ' + sub_rule + ' '    # Pad the string with a space on either sides
+    # Assuming the above padded strings, the following conditions must be satisfied for rule to be compatible with a larger phrase:
+    #   rule.startswith(r_pad) or rule.endswith(l_pad) or rule.find(b_pad) != -1
 
-    if cRC_rule.startswith(cRC_r_pad) or  cRC_rule.endswith(cRC_l_pad) or cRC_rule.find(cRC_b_pad) != -1:
-        cRC_rule_compatible = True
-    return cRC_rule_compatible
+    if rule.startswith(sub_rule + ' ') or rule.endswith(' ' + sub_rule) or \
+            rule.find(' ' + sub_rule + ' ') != -1:
+        return True
+    return False
 
 
-def checkConstraints(cC_s_span, cC_t_span, cC_sub_src, cC_sub_tgt):
-    'Checks if the rules satisfy the filtering constraints; used to balance grammar size'
+def checkConstraints(src, tgt, sub_src, sub_tgt):
+    ''' Checks if the rules satisfy the filtering constraints (without these the grammar would explode) '''
 
-    # Return a default **empty** rule if any of the constraints is not satisifed
-    cC_rule = ''
+    # Return a default 'None' rule if any of the constraints is not satisifed
 
     # Substitute the nonterminal in both sides before checking the constraints
     # If the constraints are satisfied, then the modified rules are combined and returned
-    cC_X1_indx = cC_s_span.find('X__1')
-    if cC_X1_indx != -1:
+    X1_indx = src.find('X__1')
+    if X1_indx != -1:
         # Check constraint-3: Rules are limited to five non-terminals and terminals on source side
         # Find the difference in length between the source phrase and sub-phrase,
-        # if the length difference is more than TOT_TERMS (default 5), don't add it to the sentTempDict
-        if ( len(cC_s_span.split()) - len(cC_sub_src.split()) + 1 ) > TOT_TERMS:
-            return cC_rule
+        # if the length difference is more than TOT_TERMS (default 7), don't add it to the rulesTempSet
+        if ( len(src.split()) - len(sub_src.split()) + 1 ) > tot_src_terms:
+            return None
 
         # Constraint-4: The source side does **NOT** have two adjacent nonterminals
-        cC_X1_follows = cC_sub_src + ' X__1'
-        cC_X1_preceeds = 'X__1 ' + cC_sub_src
-        if cC_s_span.startswith(cC_X1_follows) or cC_s_span.find(' '+cC_X1_follows) != -1 or cC_s_span.endswith(cC_X1_preceeds) or cC_s_span.find(cC_X1_preceeds+' ') != -1:
-            return cC_rule
+        #   The sub phrase should not be next to the existing non-terminal (X__1)
+        adj_X1_right = sub_src + ' X__1'
+        adj_X1_left = 'X__1 ' + sub_src
+        if src.startswith(adj_X1_right) or src.find(' '+adj_X1_right) != -1 or \
+           src.endswith(adj_X1_left) or src.find(adj_X1_left+' ') != -1:
+            return None
 
         # If non-terminal X__1 occurs to the right of the current sub-phrase, rename X__1 to X__2 in
         # both source & target rules. In any synchronous rule, the source side will always have the
         # non-terminal X__2 following the X__1
-        cC_r_pad = cC_sub_src + ' '
-        cC_b_pad = ' ' + cC_sub_src + ' '
-        if cC_s_span.find(cC_b_pad, 0, cC_X1_indx) != -1 or cC_s_span.startswith(cC_r_pad):
-            cC_s_span = cC_s_span.replace('X__1', 'X__2', 1)
-            cC_t_span = cC_t_span.replace('X__1', 'X__2', 1)
-            cC_rep_str = 'X__1'
-        else:
-            cC_rep_str = 'X__2'
+        if src.startswith(sub_src+' ') or src.find(' '+sub_src+' ', 0, X1_indx) != -1:
+            src = src.replace('X__1', 'X__2', 1)
+            tgt = tgt.replace('X__1', 'X__2', 1)
+            rep_str = 'X__1'
+        else: rep_str = 'X__2'
     else:
-        cC_rep_str = 'X__1'
+        rep_str = 'X__1'
 
-    cC_s_side = replaceItem(cC_s_span, cC_sub_src, cC_rep_str)
-    cC_t_side = replaceItem(cC_t_span, cC_sub_tgt, cC_rep_str)
+    s_side = replaceItem(src, sub_src, rep_str)
+    t_side = replaceItem(tgt, sub_tgt, rep_str)
 
     # Constraint-5: Both sides have atleast one terminal aligned with each other
-    cC_srcTermLst = cC_s_side.split()
-    cC_tgtTermLst = cC_t_side.split()
-    cC_aligned_terminal = False
-
-    for cC_pos in cC_srcTermLst:
-        if alignDoD.has_key(cC_pos):
-            for cC_tgt_align_pos in alignDoD[cC_pos].keys():
-                try: 
-                    cC_tgt_indx = cC_tgtTermLst.index(cC_tgt_align_pos)
-                    cC_aligned_terminal = True
-                    break
-                except ValueError:
-                    pass
-
-            if cC_aligned_terminal:
+    tgtTermLst = t_side.split()
+    aligned_terminal = False
+    for pos in s_side.split():
+        if not alignDoD.has_key(pos): continue
+        for tgt_align_pos in alignDoD[pos].keys():
+            try: 
+                tgtTermLst.index(tgt_align_pos)
+                aligned_terminal = True
                 break
+            except ValueError:
+                pass
 
-    if not cC_aligned_terminal:
-        return cC_rule
+        # If all the constraints are satisfied compose the rule as a tuple and return it
+        if aligned_terminal:
+            return (s_side, t_side)
 
-    # If all the constraints are satisfied compose the rule as a tuple and return it
-    cC_rule = (cC_s_side, cC_t_side)
-    return cC_rule
+    return None
 
 
-def replaceItem(rI_string, rI_match, rI_replacement):
+def replaceItem(full_str, p_match, rep_str):
 
-    if len( rI_match.split() ) > 1:   # If rI_match has just more than element, replace it directly
-        return rI_string.replace(rI_match, rI_replacement, 1)
-    else:   # else, iterate over the elements in rI_string to find rI_match to replace it with rI_replacement
-        rI_tmpLst = []
-        for rI_tmp in rI_string.split():
-            if rI_tmp == rI_match:
-                rI_tmpLst.append(rI_replacement)
+    if len( p_match.split() ) > 1:   # If p_match has just more than element, replace it directly
+        return full_str.replace(p_match, rep_str, 1)
+    else:   # else, iterate over the elements in full_str to find p_match to replace it with rep_str
+        tmpLst = []
+        for tok in full_str.split():
+            if tok == p_match:
+                tmpLst.append(rep_str)
             else:
-                rI_tmpLst.append(rI_tmp)
-        return ' '.join( rI_tmpLst )
+                tmpLst.append(tok)
+        return ' '.join(tmpLst)
 
 
-def compFeatureCounts(cFC_rule, cFC_srcWrds, cFC_tgtWrds):
+def compFeatureCounts(rule):
     'Convert to lexical rule and find the alignment for the entries in the rule. Also compute feature counts P(s|t), P(t|s), P_w(s|t) and P_w(t|s)'
 
-    mc_src = ''
-    mc_tgt = ''
-    cFC_fAlignment = ''
-    cFC_rAlignment = ''
-    cFC_srcLexLst = []
-    cFC_tgtLexLst = []
+    global srcWrds, tgtWrds
     global fAlignDoD, rAlignDoD
+    srcLexLst = []
+    tgtLexLst = []
+    alignLst = []
 
-    cFC_srcPosLst = cFC_rule[0].split()
-    cFC_tgtPosLst = cFC_rule[1].split()
+    sPosLst = rule[0].split()
+    tPosLst = rule[1].split()
     # Convert the word positions in source side of the rule to corresponding lexemes
-    cFC_alignLst = []
-    for cFC_src_indx, cFC_src_pos in enumerate( cFC_srcPosLst ):
-        if (cFC_src_pos.find('X__1') != -1) or (cFC_src_pos.find('X__2') != -1):
-            cFC_rep_str = cFC_src_pos
+    item_indx = 0
+    for s_tok in sPosLst:
+        if s_tok.startswith('X__'):
+            srcLexLst.append(s_tok)
         else:
-            cFC_rep_str = cFC_srcWrds[int(cFC_src_pos)]
-
+            srcLexLst.append(srcWrds[int(s_tok)])
             # Find the forward alignment for the lexemes in the rule
-            cFC_alignment = getFwrdAlignment(cFC_src_indx, cFC_src_pos, cFC_tgtPosLst)
-            if len(cFC_alignment) > 0:
-                cFC_alignLst.append(cFC_alignment)
-
-        cFC_srcLexLst.append(cFC_rep_str)
-    cFC_fAlignment = ' '.join(cFC_alignLst)
+            alignment = getFwrdAlignment(item_indx, s_tok, tPosLst)
+            alignLst.append(alignment)
+            #if len(alignment) > 0:
+            #    alignLst.append(alignment)
+        item_indx += 1
+    fAlignment = ' '.join(alignLst)
 
     # Convert the word positions in target side of the rule to corresponding lexemes
-    cFC_alignLst = []
-    for cFC_tgt_indx, cFC_tgt_pos in enumerate( cFC_tgtPosLst ):
-        if (cFC_tgt_pos.find('X__1') != -1) or (cFC_tgt_pos.find('X__2') != -1):
-            cFC_rep_str = cFC_tgt_pos
+    del alignLst[:]
+    item_indx = 0
+    for t_tok in tPosLst:
+        if t_tok.startswith('X__'):
+            tgtLexLst.append(t_tok)
         else:
-            cFC_rep_str = cFC_tgtWrds[int(cFC_tgt_pos)]
-
+            tgtLexLst.append(tgtWrds[int(t_tok)])
             # Find the reverse alignment for the lexemes in the rule
-            cFC_alignment = getRvrsAlignment(cFC_tgt_indx, cFC_tgt_pos, cFC_srcPosLst)
-            if len(cFC_alignment) > 0:
-                cFC_alignLst.append(cFC_alignment)
-
-        cFC_tgtLexLst.append(cFC_rep_str)
-    cFC_rAlignment = ' '.join(cFC_alignLst)
+            alignment = getRvrsAlignment(item_indx, t_tok, sPosLst)
+            alignLst.append(alignment)
+            #if len(alignment) > 0:
+            #    alignLst.append(alignment)
+        item_indx += 1
+    rAlignment = ' '.join(alignLst)
 
     # Get the lexical rule and add its count from the current sentence to total count so far
-    mc_src = ' '.join(cFC_srcLexLst)
-    mc_tgt = ' '.join(cFC_tgtLexLst)
-    curr_rindx = updateRuleCount(mc_src, mc_tgt, cFC_rule)
+    curr_rindx = updateRuleCount(' '.join(srcLexLst), ' '.join(tgtLexLst), rule)
 
     # Update forward and reverse alignment dicts
-    f_align_indx = getAlignIndex(cFC_fAlignment)
-    r_align_indx = getAlignIndex(cFC_rAlignment)
+    f_align_indx = getAlignIndex(fAlignment)
+    r_align_indx = getAlignIndex(rAlignment)
     if not fAlignDoD.has_key(curr_rindx):
         fAlignDoD[curr_rindx] = {}
         rAlignDoD[curr_rindx] = {}
@@ -415,87 +368,80 @@ def compFeatureCounts(cFC_rule, cFC_srcWrds, cFC_tgtWrds):
         rAlignDoD[curr_rindx][r_align_indx] = 1
 
 
-def updateRuleCount(mc_src, mc_tgt, uRID_rule):
-    '''Updates rule and target counts'''
+def updateRuleCount(mc_src, mc_tgt, rule):
+    ''' Updates rule and target counts '''
 
-    global rule_indx, ruleIndxCntDict, tgtCntDict
+    global rule_indx, ruleDict, ruleIndxCntDict, tgtCntDict
     if not tgtCntDict.has_key(mc_tgt):
         tgtCntDict[mc_tgt] = 0
-    tgtCntDict[mc_tgt] += ruleDict[uRID_rule]
+    tgtCntDict[mc_tgt] += ruleDict[rule]
 
     mc_key = mc_src + ' ||| ' + mc_tgt              # ' ||| ' is the delimiter separating items in the key/value
     if ruleIndxCntDict.has_key(mc_key):
         curr_rindx, curr_cnt = ruleIndxCntDict[mc_key]
-        ruleIndxCntDict[mc_key] = ( curr_rindx, curr_cnt + ruleDict[uRID_rule] )
+        ruleIndxCntDict[mc_key] = ( curr_rindx, curr_cnt + ruleDict[rule] )
     else:
-        ruleIndxCntDict[mc_key] = (rule_indx, ruleDict[uRID_rule])
+        ruleIndxCntDict[mc_key] = (rule_indx, ruleDict[rule])
         curr_rindx = rule_indx
         rule_indx += 1
     return curr_rindx
 
 
-def getAlignIndex(gAI_align_str):
+def getAlignIndex(align_str):
 
-    gAI_tmpLst = gAI_align_str.split(' ')
-    gAI_tmpLst.sort()
-    gAI_aindx = ''.join( gAI_tmpLst )
-    return gAI_aindx.replace('-', '')
+    tmpLst = align_str.split(' ')
+    tmpLst.sort()
+    aindx = ''.join(tmpLst)
+    return aindx.replace('-', '')
 
 
-def getFwrdAlignment(gFA_src_indx, gFA_src_pos, gFA_tgtPosLst):
+def getFwrdAlignment(item_indx, s_pos, tPosLst):
     'Computes the alignment and lexical weights in forward direction'
 
-    gFA_alignLst = []
-    if alignDoD.has_key(gFA_src_pos):
-        gFA_alignKeyLst = []
-        gFA_alignKeyLst = alignDoD[gFA_src_pos].keys()
-        gFA_alignKeyLst.sort()
-        for gFA_aligned_tgt_pos in gFA_alignKeyLst:
+    alignLst = []
+    if alignDoD.has_key(s_pos):
+        alignKeyLst = alignDoD[s_pos].keys()
+        alignKeyLst.sort()
+        for t_pos in alignKeyLst:
             try:
                 # Get the alignment and append it to the list
-                gFA_rule_indx = gFA_tgtPosLst.index(gFA_aligned_tgt_pos)
-                gFA_alignment = str(gFA_src_indx) + '-' + str(gFA_rule_indx)
-                gFA_alignLst.append( gFA_alignment )
+                alignment = str(item_indx) + '-' + str(tPosLst.index(t_pos))
+                alignLst.append(alignment)
             except ValueError:
                 pass
     else:
-        gFA_alignment = str(gFA_src_indx) + '-Z'     # 'Z' represents 'NULL' (i.e. word is unaligned)
-        gFA_alignLst.append( gFA_alignment )
+        alignLst.append( str(item_indx) + '-Z' )     # 'Z' represents 'NULL' (i.e. word is unaligned)
 
-    gFA_rule_alignment = ' '.join(gFA_alignLst)
-    return gFA_rule_alignment
+    return ' '.join(alignLst)
 
 
-def getRvrsAlignment(gRA_tgt_indx, gRA_tgt_pos, gRA_srcPosLst):
+def getRvrsAlignment(item_indx, t_pos, sPosLst):
     'Computes the alignment and lexical weights in reverse direction'
 
-    gRA_alignLst = []
-    if revAlignDoD.has_key(gRA_tgt_pos):
-        gRA_alignKeyLst = []
-        gRA_alignKeyLst = revAlignDoD[gRA_tgt_pos].keys()
-        gRA_alignKeyLst.sort()
-        for gRA_aligned_src_pos in gRA_alignKeyLst:
+    alignLst = []
+    if revAlignDoD.has_key(t_pos):
+        alignKeyLst = revAlignDoD[t_pos].keys()
+        alignKeyLst.sort()
+        for s_pos in alignKeyLst:
             try:
                 # Get the alignment and append it to the list
-                gRA_rule_indx = gRA_srcPosLst.index(gRA_aligned_src_pos)
-                gRA_alignment = str(gRA_rule_indx) + '-' + str(gRA_tgt_indx)
-                gRA_alignLst.append( gRA_alignment )
+                alignment = str(sPosLst.index(s_pos)) + '-' + str(item_indx)
+                alignLst.append(alignment)
             except ValueError:
                 pass
     else:
-        gRA_alignment = 'Z-' + str(gRA_tgt_indx)     # 'Z' represents 'NULL' (i.e. word is unaligned)
-        gRA_alignLst.append( gRA_alignment )
+        alignLst.append( 'Z-' + str(item_indx) )     # 'Z' represents 'NULL' (i.e. word is unaligned)
 
-    gRA_rule_alignment = ' '.join(gRA_alignLst)
-    return gRA_rule_alignment
+    return ' '.join(alignLst)
 
 
 def main():
 
-    global TOT_TERMS
+    global tight_phrases_only
+    global tot_src_terms
     global X1_only
     if len(sys.argv) < 4 and len(sys.argv) > 6:
-        print 'Usage: python %s <file_index> <dataDir> <outDir> [Total_terms on Fr side (def 5)] [True/False]' % (sys.argv[0])
+        print 'Usage: python %s <file_index> <dataDir> <outDir> [Total_terms on Fr side (def 7)] [True/False] [True/False]' % (sys.argv[0])
         print 'Exiting!!\n'
         sys.exit()
 
@@ -504,14 +450,17 @@ def main():
     oDir = sys.argv[3]
 
     if len(sys.argv) > 4:
-        TOT_TERMS = int(sys.argv[4])
+        tot_src_terms = int(sys.argv[4])
         if len(sys.argv) == 6 and sys.argv[5] != 'True' and sys.argv[5] != 'False':
             print "Last argument should be a boolean True/False indicating one/two non-terminal case"
             sys.exit(1)
-        if len(sys.argv) == 6 and sys.argv[5] == 'True':  # True specifies that only one non-terminal is extracted; set False for two non-terminal case
+        if len(sys.argv) == 6 and sys.argv[5] == 'True':    # True specifies that only one non-terminal is extracted; set False for two non-terminal case
             X1_only = True
+        if len(sys.argv) == 7 and sys.argv[6] == 'False':   # False relaxes the tight phrase pairs constraint and enables the model to extract rules from loose phrases as well
+            tight_phrases_only = False
 
-    print "Using the French side total terms to be :", TOT_TERMS
+    print "Using the French side total terms to be :", tot_src_terms
+    print "Enforcing tight phrase-pairs constraint :", tight_phrases_only
     if not dDir.endswith("/"): dDir += "/"
     if not oDir.endswith("/"): oDir += "/"
 

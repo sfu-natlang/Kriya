@@ -1,5 +1,5 @@
-## Merge the filtered rule files and consolidates the rule counts from different files ##
-## Also computes forward & reverse lexical probs ##
+# Merge the filtered rule files and consolidate their counts
+# Also compute forward & reverse lexical probs
 
 import os
 import os.path
@@ -72,6 +72,68 @@ def loadRvrsLexProbDistrib(lexDFile):
             sys.exit(1)
     lexF.close()
 
+def mergeTgtCounts(fileLst, tgtFile):
+    '''Read target counts from individual files and merge counts on the fly'''
+
+    total_rules = 0
+    candLst = []
+    tgtDict = {}
+    fileTrackLst = [ 1 for file in fileLst ]
+    stop_iteration = False
+
+    print "Reading target rules and merging their counts ..."
+    fHLst = [ open(file, 'r') for file in fileLst ]
+    oF = open(tgtFile, 'w')
+    while True:
+        stop_iteration = True
+        for f_track in fileTrackLst:
+            if f_track != 9:
+                stop_iteration = False
+                break
+
+        if stop_iteration:
+            break
+
+        for indx, f_track in enumerate( fileTrackLst ):
+            if f_track == 0 or f_track == 9:
+                continue
+
+            fileTrackLst[indx] = 0
+            line = fHLst[indx].readline()
+            line = line.strip()
+            if line == '':
+                fileTrackLst[indx] = 9          # Set 9 if 'EOF' is reached
+                continue
+
+            (tgt, r_cnt) = line.split(' ||| ')
+            r_count = float( r_cnt )
+
+            if tgtDict.has_key(tgt):
+                for indx1, cand in enumerate( candLst ):
+                    if cand[0] == tgt:
+                        r_count_new = cand[1] + r_count
+                        indxLst = cand[2] + [indx]
+                        candLst[indx1] = (tgt, r_count_new, indxLst)
+                        break
+            else:
+                tgtDict[tgt] = 1
+                candLst.append( (tgt, r_count, [indx]) )
+
+        if len(candLst) == 0: continue
+
+        heapq.heapify(candLst)
+        (tgt, r_count, indxLst) = heapq.heappop(candLst)
+        oF.write( "%s ||| %g\n" % (tgt, r_count) )
+        total_rules += 1
+        tgtDict.pop(tgt)
+        for indx1 in indxLst:
+            fileTrackLst[indx1] = 1
+
+    for fH in fHLst:
+        fH.close()
+    oF.close()
+    print( "Total # of rules : %d" % (total_rules) )
+
 def read_n_merge(fileLst, outFile1, outFile2):
     '''Read entries from the individual files and merge counts on the fly'''
 
@@ -112,22 +174,24 @@ def read_n_merge(fileLst, outFile1, outFile2):
 
             if ruleDict.has_key(rule):
                 oldTup = ruleDict[rule]
-                valTup = (oldTup[0] + r_count, unifyAlignment(oldTup[1], f_align), \
-                            unifyAlignment(oldTup[2], r_align), oldTup[3] + [indx])
+                valTup = (oldTup[0] + r_count, unifyAlignment(oldTup[1], r_align), oldTup[2] + [indx])
                 ruleDict[rule] = valTup
             else:
-                valTup = (r_count, f_align, r_align, [indx])
+                valTup = (r_count, r_align, [indx])
                 ruleDict[rule] = valTup
                 heapq.heappush(candLst, rule)
 
         if len(candLst) == 0: continue
 
         popped_rule = heapq.heappop(candLst)
-        (r_count, f_align, r_align, indxLst) = ruleDict.pop(popped_rule)
-        lex_prob_inv = aggregateLexProb(popped_rule, f_align, 1)       # 1 (True) denotes inverse alignments
-        lex_prob_dir = aggregateLexProb(popped_rule, r_align, 0)       # 0 (False) denotes direct alignments
-        oF1.write( "%s ||| %g ||| %s ||| %s\n" % (popped_rule, r_count, f_align, r_align) )
-        oF2.write( "%s ||| %g ||| %g ||| %g\n" % (popped_rule, r_count, lex_prob_inv, lex_prob_dir) )
+        (r_count, r_align, indxLst) = ruleDict.pop(popped_rule)
+        src, tgt = popped_rule.split(' ||| ')                   # calcLexProb() expects ruleT
+        srcW = src.split(' ')
+        tgtW = tgt.split(' ')
+        f_lex_prob = aggregateLexProb(srcW, tgtW, r_align, 1)       # 1 (True) denotes forward alignments
+        r_lex_prob = aggregateLexProb(srcW, tgtW, r_align, 0)       # 0 (False) denotes reverse alignments
+        oF1.write( "%s ||| %g ||| %s ||| %s\n" % (popped_rule, r_count, r_align, f_align) )
+        oF2.write( "%s ||| %g ||| %g ||| %g\n" % (popped_rule, r_count, r_lex_prob, f_lex_prob) )
         total_rules += 1
         for indx1 in indxLst:
             fileTrackLst[indx1] = 1
@@ -141,92 +205,92 @@ def read_n_merge(fileLst, outFile1, outFile2):
 def unifyAlignment(align_str, curr_align):
     '''Unifies the current alignment with existing alignments'''
 
-    tempAlignDict = {}
-    for align in curr_align.split(' ## '):
-        #nalign = normalizeAlignment(align)
-        tempAlignDict[align] = 1
+    alignment_found = False
+    for prev_align in align_str.split(' ## '):
+        if prev_align == curr_align:
+            alignment_found = True
+            break
 
-    for align in align_str.split(' ## '):
-        #nalign = normalizeAlignment(align)
-        if not tempAlignDict.has_key(align):
-            tempAlignDict[align] = 1
+    if alignment_found:
+        return align_str
+    else:
+        return align_str + ' ## ' + curr_align
 
-    return ' ## '.join(tempAlignDict.keys())
+def getAlignTupLst(alignments):
+    aTupLst = []
 
-def normalizeAlignment(align):
-    nalign = ''
-    for i in range(0, len(align), 2):
-        if align[i] != 'Z' and align[i+1] != 'Z':
-            nalign += align[i:i+2]
-    return nalign
+    for ind_alignment in alignments.split(' ## '):
+        aTup = []
+        for i in xrange(0, len(ind_alignment), 2):
+            s_pos, t_pos = ind_alignment[i], ind_alignment[i+1]
+            s_pos = -1 if s_pos == 'Z' else int(s_pos)
+            t_pos = -1 if t_pos == 'Z' else int(t_pos)
+            aTup.append( (s_pos, t_pos) )
+        aTupLst.append( tuple(aTup) )
 
-def aggregateLexProb(rule, align_str, align_direction):
+    return aTupLst
+
+def aggregateLexProb(srcW, tgtW, align_str, align_direction):
     '''Aggregates the lexical probabilities of multiple alignments for a given rule and calculate its average/ worst lexical prob'''
 
     worst_lex_prob = float('inf')
-    #align_count = 0
-    #lex_prob_sum = 0.0
-    ruleT = rule.split(' ||| ')                   # calcLexProb() expects ruleT
-    for align_indx in align_str.split(' ## '):
-        lex_prob = calcLexProb(ruleT, align_indx, align_direction)
+    aTupLst = getAlignTupLst(align_str)
+    for aTups in aTupLst:
+        lex_prob = calcLexProb(srcW, tgtW, aTups, align_direction)
         if lex_prob < worst_lex_prob:
             worst_lex_prob = lex_prob
-        #lex_prob_sum += calcLexProb(ruleT, align_indx, align_direction)
-        #align_count += 1
 
-    #return lex_prob_sum / float(align_count)
     return worst_lex_prob
 
-def calcLexProb(ruleT, align_indx, align_direction):
+def getUnalignedIndices(p_len, phrWrds, alignTups, tup_indx):
+    wordAlignSet = set([])
+
+    for aTup in alignTups:
+        if aTup[tup_indx] == -1: continue
+        if aTup[tup_indx] not in wordAlignSet:
+            wordAlignSet.add( aTup[tup_indx] )
+
+    for i in xrange(p_len):
+        if phrWrds[i].startswith('X__'): continue
+        if i not in wordAlignSet:
+            if tup_indx == 0: alignTups.append( (i, -1) )
+            else: alignTups.append( (-1, i) )
+
+    return tuple(alignTups)
+
+def calcLexProb(srcWrds, tgtWrds, aTups, align_direction):
     '''Calculates the lexical probability for the given rule and its alignment'''
 
     global null_term
     global lexProbDict
     lex_prob = 1.0
-    srcWrds = []
-    tgtWrds = []
     countLst = []
     probLst = []
     alignPosDict = {}
 
-    srcWrds = ruleT[0].split()
-    tgtWrds = ruleT[1].split()
-
-    #print "Rule  :", ruleT
-    #print "Align :", align_indx
-    #print "Direc :", align_direction
+    alignTups = getUnalignedIndices(len(srcWrds), tuple(srcWrds), list(aTups), 0)
+    alignTups = getUnalignedIndices(len(tgtWrds), tuple(tgtWrds), list(alignTups), 1)
 
     # Initialize the count and prob lists based on the alignment direction
-    plen = len(srcWrds) if align_direction else len(tgtWrds)
-    for i in range(0, plen):
+    p_len = len(srcWrds) if align_direction else len(tgtWrds)
+    for i in xrange(0, p_len):
         countLst.append(0)
         probLst.append(0.0)
 
-    for i in range(0, len(align_indx), 2):
+    for i, j in alignTups:
         # Get source and target words from the alignment
-        if align_indx[i] == 'Z':
-            src_wrd = null_term
-        else:
-            indx = int( align_indx[i] )
-            src_wrd = srcWrds[indx]
+        src_wrd = null_term if i == -1 else srcWrds[i]
+        tgt_wrd = null_term if j == -1 else tgtWrds[j]
+        lexT = (src_wrd, tgt_wrd)
 
-        if align_indx[i+1] == 'Z':
-            tgt_wrd = null_term
-        else:
-            indx = int( align_indx[i+1] )
-            tgt_wrd = tgtWrds[indx]
-
-        if lexProbDict.has_key( (src_wrd, tgt_wrd) ): lexT = (src_wrd, tgt_wrd)
-        elif lexProbDict.has_key( (null_term, tgt_wrd) ): lexT = (null_term, tgt_wrd)
-        elif lexProbDict.has_key( (src_wrd, null_term) ): lexT = (src_wrd, null_term)
         # Count the alignments depending on the alignment direction and
         # incrementally compute the lexical probability
         if align_direction:
-            pos2count = int( align_indx[i] )
-            prob = lexProbDict[lexT][1]
-        else:
-            pos2count = int( align_indx[i + 1] )
+            pos2count = i
             prob = lexProbDict[lexT][0]
+        else:
+            pos2count = j
+            prob = lexProbDict[lexT][1]
 
         if alignPosDict.has_key(pos2count):
             countLst[pos2count] += 1
@@ -236,21 +300,16 @@ def calcLexProb(ruleT, align_indx, align_direction):
             countLst[pos2count] = 1
             probLst[pos2count] = prob
 
-    #print "Probs : ", probLst
-    #print "Counts: ", countLst
     for indx, sum_prob in enumerate( probLst ):
         if sum_prob > 0.0:
             align_count = countLst[indx]
             lex_prob *= sum_prob / float( align_count )
-    #        print "    ", lex_prob, " <== ", sum_prob, " ** ", align_count
-    #print
 
     return lex_prob
 
 def main():
 
     global null_term
-
     tot_args = len(sys.argv)
     inDir = sys.argv[1]
     outDir = sys.argv[2]
@@ -275,15 +334,21 @@ def main():
     if not inDir.endswith('/'): inDir += '/'
     if not outDir.endswith('/'): outDir += '/'
     fileLst = []
+    tgtFileLst = []
     for file in os.listdir(inDir):
-        if file.startswith("tgt"): continue
+        if file.startswith("tgt"): is_tgt_file = True
+        else: is_tgt_file = False
+
         file = inDir + file
         if os.path.isfile(file):
-            fileLst.append(file)
+            if is_tgt_file: tgtFileLst.append(file)
+            else: fileLst.append(file)
 
     outFile1 = outDir + 'rules_cnt_align.out'
     outFile2 = outDir + 'rules_cnt_lprob.out'
+    tgtFile = outDir + 'tgt_rules.all.out'
 
+    #mergeTgtCounts(tgtFileLst, tgtFile)
     read_n_merge(fileLst, outFile1, outFile2)
 
 if __name__ == '__main__':

@@ -1,0 +1,162 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Welcome to Kriya’s documentation! &mdash; Kriya version documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     'version',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Kriya version documentation" href="#" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li><a href="#">Kriya version documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="welcome-to-kriya-s-documentation">
+<h1>Welcome to Kriya&#8217;s documentation!<a class="headerlink" href="#welcome-to-kriya-s-documentation" title="Permalink to this headline">¶</a></h1>
+<blockquote>
+<div>Kriya is an implementation of hierarchical phrase-based (hiero) SMT system. See Chiang, 2007</div></blockquote>
+<p>for description of Hiero model.</p>
+<p>Kriya is entirely implemented in Python and includes both grammar extractor and decoder modules.
+Please see the PBML paper for technical details specific to this implementation.</p>
+<p>For usage information, see src/README and doc/ directory. The example/ directory includes a toy
+Fr-En corpus for training along with a Kriya config file for training Hiero grammar. Please read
+example/README for details first.</p>
+<p>If you use this for your research consider citing:
+Baskaran Sankaran, Majid Razmara and Anoop Sarkar. 2012. Kriya – An end-to-end Hierarchical
+Phrase-based MT System. The Prague Bulletin of Mathematical Linguistics (PBML), (97), 83&#8211;98</p>
+<p><strong>Required Software</strong>
+The following is a list of software that might be required depending on what you are trying to do.</p>
+<ul>
+<li><p class="first">Python  - 2.6.2 or later (but not Python 3.0+)</p>
+</li>
+<li><p class="first">Giza++  - For word alignments</p>
+</li>
+<li><p class="first">MOSES   - for extracting phrase alignments from Giza++ output and (optionally) for MERT</p>
+</li>
+<li><p class="first">SRILM   - For building language model (LM)</p>
+</li>
+<li><dl class="first docutils">
+<dt>KenLM   - Library for querying the language model (a Python wrapper is included with the decoder</dt>
+<dd><p class="first last">and the source for the wrapper will be released soon)</p>
+</dd>
+</dl>
+</li>
+<li><p class="first">MegaM   - Mega model optimization package (download from: <a class="reference external" href="http://www.cs.utah.edu/~hal/megam/">http://www.cs.utah.edu/~hal/megam/</a>)</p>
+</li>
+<li><p class="first">SVMRank - SVM for Ranking optimization (download from: <a class="reference external" href="http://www.cs.cornell.edu/people/tj/svm_light/svm_rank.html">http://www.cs.cornell.edu/people/tj/svm_light/svm_rank.html</a>)</p>
+</li>
+</ul>
+<p>At least one of the last two optimization tools are required for Kriya parameter optimization with PRO.</p>
+<div class="section" id="license">
+<h2>License:<a class="headerlink" href="#license" title="Permalink to this headline">¶</a></h2>
+<p>For license information, see the LICENCE file.</p>
+</div>
+<div class="section" id="contributors">
+<h2>Contributors:<a class="headerlink" href="#contributors" title="Permalink to this headline">¶</a></h2>
+<p>Baskaran Sankaran, Majid Razmara and Anoop Sarkar
+{baskaran,mra44,anoop}&#64;cs.sfu.ca</p>
+<p>NatLang Lab, School of Computing Science
+Simon Fraser University,
+Burnaby, BC V5A 1S6. Canada</p>
+<p>Contents:</p>
+<div class="toctree-wrapper compound">
+<ul class="simple">
+</ul>
+</div>
+</div>
+</div>
+<div class="section" id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li><a class="reference internal" href="genindex.html"><em>Index</em></a></li>
+<li><a class="reference internal" href="py-modindex.html"><em>Module Index</em></a></li>
+<li><a class="reference internal" href="search.html"><em>Search Page</em></a></li>
+</ul>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Welcome to Kriya&#8217;s documentation!</a><ul>
+<li><a class="reference internal" href="#license">License:</a></li>
+<li><a class="reference internal" href="#contributors">Contributors:</a><ul>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/index.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li><a href="#">Kriya version documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, Baskaran Sankaran.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2b1.
+    </div>
+  </body>
+</html>

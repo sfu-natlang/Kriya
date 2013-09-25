@@ -10,6 +10,8 @@ from parse_CP import Parse
 from phraseTable import PhraseTable
 from refPhrases import RefPhrases
 
+refFiles = []
+
 #import gc, pprint
 #gc.set_debug(gc.DEBUG_LEAK | 
 #             gc.DEBUG_UNCOLLECTABLE |

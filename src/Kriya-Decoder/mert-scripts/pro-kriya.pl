@@ -811,7 +811,7 @@ sub scan_config {
                 @vals = ();
             }
             else {
-                push (@vals, $_);
+                push (@vals, split(/\s+/, $_));
             }
             next;
         }

@@ -926,9 +926,9 @@ sub create_config {
 	    delete($P{$parameter});
 	    # skip until new parameter, only write comments
 	    while($line = <INI>) {
-		print OUT $line if $line =~ /^\#/ || $line =~ /^\s+$/;
-		last if $line =~ /^\[/;
-		last unless $line;
+		    print OUT $line if $line =~ /^\#/ || $line =~ /^\s+$/;
+		    last if $line =~ /^\[/;
+		    last unless $line;
 	    }
 	    next;
 	}
@@ -1090,15 +1090,17 @@ sub scan_config {
 	    }
 	}
 	elsif (defined $shortname) {
-	    my $lambda_cnt = 0;
-	    my $new_start;
-	    my $needlambdas = defined $additional_triples->{$shortname} ? scalar(@{$additional_triples->{$shortname}}) : 1;
-	    while ( $lambda_cnt < $needlambdas ) {
-		chomp($_);
-		${$used_triples{$shortname}}[$lambda_cnt]->[0] = $_;
-		$lambda_cnt++;
-		$_ = <INI>;
-	    }
+        my $new_start;
+        my $needlambdas = defined $additional_triples->{$shortname} ? scalar(@{$additional_triples->{$shortname}}) : 1;
+        chomp($_);
+        my @temp = split(/\s+/, $_);
+        my $lambda_cnt = 0;
+        foreach (@temp) {
+            ${$used_triples{$shortname}}[$lambda_cnt]->[0] = $_;
+            $lambda_cnt++;
+        }
+        print STDERR "# of lambdas specified doesn't equal the required # of lambdas. Exiting!!\n" if ( $lambda_cnt != $needlambdas );
+        $_ = <INI>;
 	    undef $shortname;
 	}
     }

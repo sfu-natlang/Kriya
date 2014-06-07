@@ -118,7 +118,6 @@ def readPhraseSpan(spanFile, outFile, tgtFile):
                 print "Sentences processed : %6d ..." % sent_count
 
     inF.close()
-
     # Write the rule counts, forward and reverse alignments to files
     oF = open(outFile, 'w')
     rules = ruleIndxCntDict.keys()
@@ -164,8 +163,6 @@ def check4Subphrase(c4Sp_phr_len):
     for c4Sp_phr_pair in sentInitDoD[c4Sp_phr_len].keys():
         c4Sp_spanTuple = sentInitDoD[c4Sp_phr_len][c4Sp_phr_pair]
         c4Sp_s_span = c4Sp_phr_pair[0]
-	if c4Sp_s_span == '27 28 29 30':
-	    print 1
         c4Sp_t_span = c4Sp_phr_pair[1]
 
         # Use the global variable for counting the number of rules derived
@@ -192,9 +189,7 @@ def check4Subphrase(c4Sp_phr_len):
             srcRuleTerms = c4Sp_s_span.split()
             c4Sp_sub_phr_len = len( srcRuleTerms )
 
-	    ##Maryam: commenting this constraint to generalize to more than 2 non-terminals
             # Constraint-1: Check if the source span already has 2 nonterminals, then do not process it further
-            #if (X1_only and c4Sp_s_span.find('X__1') != -1) or (c4Sp_s_span.find('X__1') != -1 and c4Sp_s_span.find('X__2') != -1):    
 	    nonTerminalPatterns = re.findall(r'X__[0-9]',c4Sp_s_span)
             if len(nonTerminalPatterns) == X__Max:
                 pass
@@ -216,7 +211,6 @@ def check4Subphrase(c4Sp_phr_len):
             c4Sp_rule_prob = 0.0
 #        c4Sp_rule_prob = 1.0 / len( sentFinalDict.keys() )
 
-	#print c4Sp_phr_pair, tot_rules_derived
         for c4Sp_rule in sentFinalDict.keys():
             # Initial phrase-pairs having weight '1' are added with 'unit' counts
             if sentFinalDict[c4Sp_rule] == 1:
@@ -230,7 +224,7 @@ def check4Subphrase(c4Sp_phr_len):
                 ruleDict[c4Sp_rule] += c4Sp_rule_prob
             else:
                 ruleDict[c4Sp_rule] = c4Sp_rule_prob
-            #print '%15s %15s : %g' % (c4Sp_rule[0], c4Sp_rule[1], ruleDict[c4Sp_rule])
+        #    print '%15s %15s : %g' % (c4Sp_rule[0], c4Sp_rule[1], ruleDict[c4Sp_rule])
 
         # Clear the dictionaries again to reduce the memory usage
         sentTempDict.clear()
@@ -242,21 +236,15 @@ def isRuleDecomposable( iRD_srcRuleTerms ):
     iRD_last_indx = len( iRD_srcRuleTerms ) - 1
     prev_XSymbol = -1
     for iRD_term_indx, iRD_term in enumerate( iRD_srcRuleTerms ):
-        if re.search('^X__',iRD_term) is not None:
-		prev_XSymbol = iRD_term_indx
-        if iRD_term_indx - prev_XSymbol > 0: #it should be changed (to 0) if we relaxed the rules!
-		return True
-    return False
-        #if iRD_term == 'X__1':
+        if iRD_term.find('X__') >= 0:
             ## For a rule to be decomposable further it should have at least one-terminal word on
             ## either side of X__1, which can be written by X__2. Note that the two non-terminals can not
             ## occur next to each other in source side and so there should be at least one word in between.
-         #   if ( iRD_term_indx >= 2 or iRD_last_indx - iRD_term_indx >= 2 ):
-          #      return True
-          #  else: return False
+            prev_XSymbol = iRD_term_indx
+        if iRD_term_indx - prev_XSymbol > 0: #it should be changed (to 0) if we relaxed the rules!
+            return True
+    return False
 
-#    if iRD_last_indx > 0: return True       # decide for a terminal rule that doesn't have 'X__1'
- #   else: return False
 
 
 def iterateInitPhrPairs(iIPP_phr_len, iIPP_s_span, iIPP_t_span):
@@ -270,7 +258,6 @@ def iterateInitPhrPairs(iIPP_phr_len, iIPP_s_span, iIPP_t_span):
                 iIPP_subSpanTuple = sentInitDoD[iIPP_sub_phr_len][iIPP_sub_phr_pair]
 
                 # Check constraint-2: The given phrases are sub-phrases of source and target spans
-		# Marzieh modified
                 src_side_compatible = checkRuleCompatibilityforSrc(iIPP_s_span, iIPP_sub_phr_pair[0])
                 tgt_side_compatible = checkRuleCompatibilityforTgt(iIPP_t_span, iIPP_sub_phr_pair[1])
                 if src_side_compatible and tgt_side_compatible:
@@ -298,15 +285,6 @@ def checkRuleCompatibilityforTgt(cRC_rule, cRC_sub_rule):
     #cRC_r_pad = cRC_sub_rule + ' '          # Pad the string with a space on right side
     #cRC_b_pad = ' ' + cRC_sub_rule + ' '    # Pad the string with a space on either sides
     
-    # Marzieh added begin 	
-#    fildes = cRC_rule.split(" ")
- #   for i in range(len(fildes)):
-#	if re.search('^X__',fildes[i]) is not None:
-#		for j in range(i+1,len(fildes)):
-#			if re.search('^X__', fildes[j]) is None:
-#				return False
-#		break
-
     nonTerminalPatterns = re.findall(r'X__[0-9]',cRC_rule)
     end_rule = cRC_sub_rule[:]
     for nonTerm in nonTerminalPatterns:
@@ -315,18 +293,7 @@ def checkRuleCompatibilityforTgt(cRC_rule, cRC_sub_rule):
 	return True
 
     return False
-#    left_to_right_pattern = cRC_sub_rule + "\s?X__[0-9]]"
- #   if not cRC_rule.startswith(cRC_r_pad):
-  #      if re.search("X__[0-9]",cRC_rule) is None:
-#		if cRC_rule.endswith(cRC_l_pad):
-#	        	cRC_rule_compatible = True
-#	elif re.search(left_to_right_pattern,cRC_rule) is not None:
-#	        cRC_rule_compatible = True
-		
-    # Marzieh added end 
-   # return cRC_rule_compatible
 
-# Marzieh Added 
 def checkRuleCompatibilityforSrc(cRC_rule, cRC_sub_rule):
     'Checks if the sub phrase is compatible with the bigger rule (for both src & tgt rules)'
 
@@ -334,11 +301,9 @@ def checkRuleCompatibilityforSrc(cRC_rule, cRC_sub_rule):
     cRC_l_pad = ' ' + cRC_sub_rule          # Pad the string with a space on left side
     cRC_r_pad = cRC_sub_rule + ' '          # Pad the string with a space on right side
     cRC_b_pad = ' ' + cRC_sub_rule + ' '    # Pad the string with a space on either sides
-    
+
     if cRC_rule.startswith(cRC_r_pad) or  cRC_rule.endswith(cRC_l_pad) or cRC_rule.find(cRC_b_pad) != -1:
     	cRC_rule_compatible = True
-
- 
     return cRC_rule_compatible
 
 def getMaxNonTerm(cC_span):
@@ -357,8 +322,6 @@ def checkConstraints(cC_s_span, cC_t_span, cC_sub_src, cC_sub_tgt):
     # Substitute the nonterminal in both sides before checking the constraints
     # If the constraints are satisfied, then the modified rules are combined and returned
     (cC_XMAX_indx, cC_XMAX_value) = getMaxNonTerm(cC_s_span)
-#    cC_X1_indx = cC_s_span.find('X__1')
-#    if cC_X1_indx != -1:
     nonTerminalPatterns = re.findall(r'X__[0-9]',cC_s_span)
     if cC_XMAX_indx != -1:
         # Check constraint-3: Rules are limited to five non-terminals and terminals on source side
@@ -383,7 +346,6 @@ def checkConstraints(cC_s_span, cC_t_span, cC_sub_src, cC_sub_tgt):
         for x_index,x_term in enumerate(nonTerminalPatterns):
 		s_span_index = cC_s_span.find(x_term)
 	        if cC_s_span.find(cC_b_pad, 0, s_span_index) != -1 or cC_s_span.startswith(cC_r_pad):
-		    #for new_x_index in range(x_index+1, len(nonTerminalPatterns)+1):
 		    for new_x_index in range(len(nonTerminalPatterns), x_index, -1):
 		            cC_s_span = cC_s_span.replace('X__'+str(new_x_index), 'X__'+str(new_x_index+1), 1)
         		    cC_t_span = cC_t_span.replace('X__'+str(new_x_index), 'X__'+str(new_x_index+1), 1)
@@ -454,7 +416,6 @@ def compFeatureCounts(cFC_rule, cFC_srcWrds, cFC_tgtWrds):
     cFC_alignLst = []
     for cFC_src_indx, cFC_src_pos in enumerate( cFC_srcPosLst ):
 	if re.search('^X__',cFC_src_pos) is not None : 
-        #if (cFC_src_pos.find('X__1') != -1) or (cFC_src_pos.find('X__2') != -1): #cmted Marzieh 
             cFC_rep_str = cFC_src_pos
         else:
             cFC_rep_str = cFC_srcWrds[int(cFC_src_pos)]
@@ -470,9 +431,7 @@ def compFeatureCounts(cFC_rule, cFC_srcWrds, cFC_tgtWrds):
     # Convert the word positions in target side of the rule to corresponding lexemes
     cFC_alignLst = []
     for cFC_tgt_indx, cFC_tgt_pos in enumerate( cFC_tgtPosLst ):
-         
 	if re.search('^X__',cFC_tgt_pos) is not None : 
-        #if (cFC_tgt_pos.find('X__1') != -1) or (cFC_tgt_pos.find('X__2') != -1): # cmted Marzieh 
             cFC_rep_str = cFC_tgt_pos
         else:
             cFC_rep_str = cFC_tgtWrds[int(cFC_tgt_pos)]

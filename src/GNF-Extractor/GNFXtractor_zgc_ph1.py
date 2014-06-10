@@ -11,6 +11,7 @@ tot_src_terms = 7             # Total no of terms (terminals & non-terminals inc
 X1_only = False               # Flag for deciding whether to generate one non-termianl or two non-terminal rules
 weight_rules = False          # When distributing the unit-count among the rules, should it be weighted by the # of rule occurrences
 tight_phrases_only = True     # Restrict the rule extraction strictly to tighter phrases
+max_terms = 7
 
 # Global Variables
 rule_indx = 1
@@ -180,8 +181,8 @@ def computeRightTgtPhr():
                 rightTgtPhraseDict[(i,j)] = rightTgtPhraseDict[(i+1, j)]
             #if (i, j) in rightTgtPhraseDict:
             #    print (i, j), " : ", rightTgtPhraseDict[(i, j)]
-    if tight_phrases_only: 
-        fixUnAlignTgtWords()    
+    #if tight_phrases_only: 
+    fixUnAlignTgtWords()    
             
 def fixUnAlignTgtWords():
     global tgtSentLen, tgtPhraseDict, sentInitDoD, basePhrDict, strPhrDict
@@ -282,13 +283,15 @@ def genRule4Phrase(phrPairStr, (src_tuple, tgt_tuple)):
         
 def checkRuleConfigure((src_phr, tgt_phr), isNonTerm=False):
     'Checks if the rule configuration is compatible with the constraints (for both src & tgt sides)'
-    global max_non_term, tot_src_terms
+    global max_non_term, tot_src_terms, max_terms
     # source lenght
-    if len(src_phr.split()) > tot_src_terms: return False
+    src_len = len(src_phr.split())
+    if src_len > tot_src_terms: return False
     # no of non-terminals
     if isNonTerm and tgt_phr.startswith("X__"): return True
     max_x = findMaxNonTerm(src_phr)
     if max_x > max_non_term:  return False 
+    if src_len - max_x > max_terms: return False
     return True
 
 def substituteRuleSet(main_rule_lst, sub_ppair_span, isNonTerm = None):

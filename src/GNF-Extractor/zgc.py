@@ -170,7 +170,8 @@ class zgc:
         ##  1) the source-side length should not be greater than max_phr_len
         ##  2) the source and target phrases can not be fully covered by the respective spans
         ##  3) the edges are tight (no unaligned words on the edges)
-        if (y - x) < self.max_phr_len and (y + 1 - x) < self.n and (u + 1 - l) < self.m and ((x,y),(l,u)) not in self.nodesSet and \
+        #if (y - x) < self.max_phr_len and (y + 1 - x) < self.n and (u + 1 - l) < self.m and ((x,y),(l,u)) not in self.nodesSet and \
+        if (y - x) < self.max_phr_len and ((x,y),(l,u)) not in self.nodesSet and \
                 self.alignfor.has_key(x) and self.alignfor.has_key(y) and self.alignback.has_key(l) and self.alignback.has_key(u):
                 #self.alignfor[x][0] != -1 and self.alignfor[y][0] != -1 and self.alignback[l][0] != -1 and self.alignback[u][0] != -1:
             self.nodesSet.add( ((x,y),(l,u)) )
@@ -238,7 +239,7 @@ class zgc:
             raise ValueError("y not found in e_prefix", y)
 
         return self.f_prefix[self.udict[x,y]] \
-                - self.f_prefix[self.ldict[x,y] - 1] \
+                - self.f_prefix[max(self.ldict[x,y] - 1, -1)] \
                 - (self.e_prefix[y] \
                 - self.e_prefix[x-1])
 

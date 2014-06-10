@@ -26,6 +26,7 @@ nonTermRuleDoD = {}           # dictionary of rules for each span, which just co
 alignDoD = {}                 # Dict of dict to store fwd alignments
 revAlignDoD = {}              # Dict of dict to store rev alignments
 sentInitDoD = {}              # Dict of dict for storing initial phrase pairs, sentInitDoD[src_len] = {(src,tgt):1,...} (tuples of source and target spans)
+strPhrDict = {}               # Dict of dict for storing initial phrase pairs (including loose phrases on tgt), strPhrDict[src_len] = {(src,tgt):1,...} (tuples of source and target spans)
 rightTgtPhraseDict = {}
 tgtPhraseDict = {}
 ppairRulesSet = set([])
@@ -39,9 +40,9 @@ rAlignDoD = {}
 def readSentAlign(spanFile, outFile, tgtFile):
     'Reads the input phrase span file for src & tgt sentences, alignment and initial phrases'
 
-    global tight_phrases_only, nonTermRuleDoD
+    global tight_phrases_only, nonTermRuleDoD, ruleDoD
     global ruleDict, ruleIndxCntDict, tgtCntDict, phrPairLst, tgtPhraseDict
-    global srcWrds, tgtWrds, srcSentlen, tgtSentLen, rightTgtPhraseDict, sentInitDoD
+    global srcWrds, tgtWrds, srcSentlen, tgtSentLen, rightTgtPhraseDict, sentInitDoD, strPhrDict
     sent_count = 0
     phrLst = []
     aTupLst = []
@@ -85,6 +86,7 @@ def readSentAlign(spanFile, outFile, tgtFile):
             sentInitDoD = {}
             tgtPhraseDict = {}
             nonTermRuleDoD = {}
+            strPhrDict = {}
             for ppair in phrPairLst:
                 unaligned_edge = False
                 # If the boundary term of source or target phrase has an unaligned word, ignore the phrase-pair
@@ -105,8 +107,10 @@ def readSentAlign(spanFile, outFile, tgtFile):
                 # Create a dict of dict for storing initial phrase pairs (tuples of source and target spans)
                 tphr_len = ppair[1][1] - ppair[1][0] + 1
                 if not sentInitDoD.has_key(tphr_len):
+                    strPhrDict[tphr_len] = {}
                     sentInitDoD[tphr_len] = {}
                 sentInitDoD[tphr_len][ppair] = init_phr_pair
+                strPhrDict[tphr_len][ppair] = init_phr_pair
                 tgtPhraseDict[ppair[1]] = ppair
                 nonTermRuleDoD[ppair[1]] = {}
                 nonTermRuleDoD[ppair[1]][("X__1","X__1")] = 1
@@ -120,17 +124,10 @@ def readSentAlign(spanFile, outFile, tgtFile):
             for rule in ruleDict.keys(): compFeatureCounts(rule)            
             
             # Clear the variables at the end of current sentence
-            alignDoD.clear()
-            revAlignDoD.clear()
-            ruleDict.clear()
-            ruleDoD.clear()
-            sentInitDoD.clear()
-            rightTgtPhraseDict.clear()
-            tgtPhraseDict.clear()
-            nonTermRuleDoD.clear()
+            resetStructs()
             del aTupLst[:]
             sent_count += 1
-            print sent_count
+            #print sent_count
             if sent_count % 1000 == 0:
                 print "Sentences processed : %6d ..." % sent_count
         else:
@@ -152,6 +149,22 @@ def readSentAlign(spanFile, outFile, tgtFile):
 
     return None
 
+def resetStructs():
+    global alingDoD, nonTermRuleDoD, revAlignDoD
+    global rightTgtPhraseDict, ruleDict, ruleDoD
+    global sentInitDoD, strPhrDict, tgtPhraseDict, basePhrDict
+    alignDoD.clear()
+    nonTermRuleDoD.clear()
+    revAlignDoD.clear()
+    rightTgtPhraseDict.clear()
+    ruleDict.clear()
+    ruleDoD.clear()
+    sentInitDoD.clear()
+    strPhrDict.clear()
+    tgtPhraseDict.clear()
+    basePhrDict.clear()
+        
+
 def computeRightTgtPhr():
     ''' fill the table rightTgtPhraseDict. For each possible span it keeps the largest 
     subphrase which shares the right boundary on target side. '''
@@ -167,7 +180,31 @@ def computeRightTgtPhr():
                 rightTgtPhraseDict[(i,j)] = rightTgtPhraseDict[(i+1, j)]
             #if (i, j) in rightTgtPhraseDict:
             #    print (i, j), " : ", rightTgtPhraseDict[(i, j)]
+    if tight_phrases_only: 
+        fixUnAlignTgtWords()    
             
+def fixUnAlignTgtWords():
+    global tgtSentLen, tgtPhraseDict, sentInitDoD, basePhrDict, strPhrDict
+    basePhrDict = {}
+    for i in xrange(0, tgtSentLen):
+        if not revAlignDoD.has_key(str(i)):
+            j = i - 1
+            while j >= 0:
+                if revAlignDoD.has_key(str(j)):
+                    for l in xrange(0,j+1):
+                        if l+1 in sentInitDoD and (j-l, j) in tgtPhraseDict:
+                            ppair = (tgtPhraseDict[(j-l, j)][0],(j-l, i))
+                            if (j-l, j) not in basePhrDict: basePhrDict[(j-l, j)] = {}
+                            basePhrDict[(j-l, j)][ppair] = 1
+                            #tgtPhraseDict[(j-l, i)] = ppair
+                            if i-(j-l)+1 not in strPhrDict: strPhrDict[i-(j-l)+1] = {}
+                            init_phr_pair = (' '.join( [str(x) for x in xrange(ppair[0][0], ppair[0][1]+1) ] ), \
+                                             ' '.join( [str(x) for x in xrange(ppair[1][0], ppair[1][1]+1)] ) )                            
+                            strPhrDict[i-(j-l)+1][ppair] = init_phr_pair
+                    break
+                j -= 1
+            
+    return
 def printSentRules():
     global sentInitDoD, ruleDoD, tgtSentLen, ruleDict
     for tphr_len in xrange(1, tgtSentLen+1):
@@ -192,7 +229,7 @@ def xtractRules():
                 genRule4Phrase(sentInitDoD[tphr_len][phr_pair], phr_pair)
 
 def genRule4Phrase(phrPairStr, (src_tuple, tgt_tuple)):
-    global ruleDict, ruleDoD, sentInitDoD, rightTgtPhraseDict, ppairRulesSet, tgtPhraseDict
+    global ruleDict, ruleDoD, rightTgtPhraseDict, ppairRulesSet, tgtPhraseDict, basePhrDict
     
     ruleDoD[tgt_tuple] = {}   
     ppairRulesSet = set()
@@ -235,6 +272,13 @@ def genRule4Phrase(phrPairStr, (src_tuple, tgt_tuple)):
         
     # updating right most tgt phrase for this tgt
     rightTgtPhraseDict[tgt_tuple] = (src_tuple, tgt_tuple)
+    
+    # update phrases with unaligned words on right boundry of tgt side
+    if tgt_tuple in basePhrDict:
+        for ppair in basePhrDict[tgt_tuple]:
+            rightTgtPhraseDict[ppair[1]] = ppair
+            nonTermRuleDoD[ppair[1]] = nonTermRuleDoD[tgt_tuple]
+            ruleDoD[ppair[1]] = ruleDoD[tgt_tuple]
         
 def checkRuleConfigure((src_phr, tgt_phr), isNonTerm=False):
     'Checks if the rule configuration is compatible with the constraints (for both src & tgt sides)'
@@ -253,10 +297,10 @@ def substituteRuleSet(main_rule_lst, sub_ppair_span, isNonTerm = None):
                updating the final main rules by substituting the subphrase with a non-terminal
                returning updated main rules (or None, if it is not possible)'''
     
-    global ppairRulesSet, ruleDoD, nonTermRuleDoD
+    global ppairRulesSet, ruleDoD, nonTermRuleDoD, strPhrDict
 
     len_tgt_phr = sub_ppair_span[1][1] - sub_ppair_span[1][0] +1
-    sub_phr = sentInitDoD[len_tgt_phr][sub_ppair_span]                        # retrive subphrase using its span        
+    sub_phr = strPhrDict[len_tgt_phr][sub_ppair_span]                        # retrive subphrase using its span        
     update_rule_lst = set()
     if isNonTerm: local_rule_dict = nonTermRuleDoD[sub_ppair_span[1]]
     else:         local_rule_dict = ruleDoD[sub_ppair_span[1]]
@@ -354,6 +398,9 @@ def mergeNonTerms(rule, t_words, min_x, max_x):
     next_x = "X__"+str(max_x)
     s = rule[0].find(curr_x)+5
     e = rule[0].find(next_x)-1    
+    # if the next (or prev) non-term is adjacent, it is not acceptable anyway
+    if rule[0][min(e+6, len(rule[0])):].startswith("X__") or \
+       (min_x > 1 and rule[0][:max(s-6, 0)].endswith("X__"+str(min_x-1))): return None
     aligned = False
     for w in rule[0][s:e].strip().split():
         if w in alignDoD or (w.startswith("X__") and w not in t_words):
@@ -449,6 +496,7 @@ def compFeatureCounts(rule):
         fAlignDoD[curr_rindx][f_align_indx] = 1
     if not rAlignDoD[curr_rindx].has_key(r_align_indx):
         rAlignDoD[curr_rindx][r_align_indx] = 1
+
 
 def updateRuleCount(mc_src, mc_tgt, rule):
     ''' Updates rule and target counts '''

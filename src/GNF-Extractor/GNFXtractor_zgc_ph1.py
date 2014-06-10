@@ -102,7 +102,9 @@ def readSentAlign(spanFile, outFile, tgtFile):
                 init_phr_pair = (' '.join( [str(x) for x in xrange(ppair[0][0], ppair[0][1]+1) ] ), \
                         ' '.join( [str(x) for x in xrange(ppair[1][0], ppair[1][1]+1)] ) )
                 if unaligned_edge:
-                    ruleDict[init_phr_pair] = 1.0
+                    if checkRuleConfigure(init_phr_pair):
+                        if init_phr_pair in ruleDict: ruleDict[init_phr_pair] += 1.0
+                        else: ruleDict[init_phr_pair] = 1.0
                     continue
                 
                 # Create a dict of dict for storing initial phrase pairs (tuples of source and target spans)

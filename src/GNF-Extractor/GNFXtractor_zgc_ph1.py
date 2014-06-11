@@ -82,6 +82,7 @@ def readSentAlign(spanFile, outFile, tgtFile):
         elif line.startswith('LOG: PHRASES_END:'):    # End of the current sentence; now extract rules from it
             align_tree = zgc(max_phr_len)
             phrPairLst = align_tree.getAlignTree(srcSentlen, tgtSentLen, aTupLst)
+            if not tight_phrases_only: phrPairLst = addLoosePhrases(phrPairLst)
             if max_phr_len >= srcSentlen and not ((0, srcSentlen-1),(0, tgtSentLen-1)) in phrPairLst:
                 phrPairLst.append(((0, srcSentlen-1),(0, tgtSentLen-1)))
             sentInitDoD = {}
@@ -152,6 +153,33 @@ def readSentAlign(spanFile, outFile, tgtFile):
 
     return None
 
+def addLoosePhrases(phr_lst):
+    global alignDoD, revAlignDoD, tgtSentLen, srcSentlen
+    full_phr_lst = set(phr_lst)
+    length=[srcSentlen, tgtSentLen]
+    alignDict = [alignDoD, revAlignDoD]
+    for tight_ppair in phr_lst:
+        curr_lst = set()
+        curr_lst.add(tight_ppair)
+        for st_ind in [0,1]:
+            for p_ind,step in enumerate([-1, 1]):
+                new_lst = set()
+                for ppair in curr_lst:
+                    j = tight_ppair[st_ind][p_ind] + step
+                    while j >= 0 and j < length[st_ind]:
+                        if alignDict[st_ind].has_key(str(j)):
+                            break
+                        if p_ind == 0: new_phr = (j, ppair[st_ind][1])
+                        elif p_ind == 1: new_phr = (ppair[st_ind][0], j)
+                        if st_ind == 0: new_ppair = (new_phr, ppair[1])
+                        elif st_ind == 1: new_ppair = (ppair[0], new_phr)
+                        new_lst.add(new_ppair)
+                        j += step
+                curr_lst.update(new_lst)
+        full_phr_lst.update(curr_lst)
+        
+    return list(full_phr_lst)
+                        
 def resetStructs():
     global alingDoD, nonTermRuleDoD, revAlignDoD
     global rightTgtPhraseDict, ruleDict, ruleDoD
@@ -294,6 +322,7 @@ def checkRuleConfigure((src_phr, tgt_phr), isNonTerm=False):
     max_x = findMaxNonTerm(src_phr)
     if max_x > max_non_term:  return False 
     if src_len - max_x > max_terms: return False
+    if len(tgt_phr.split()) - max_x > max_terms+3: return False
     return True
 
 def substituteRuleSet(main_rule_lst, sub_ppair_span, isNonTerm = None):

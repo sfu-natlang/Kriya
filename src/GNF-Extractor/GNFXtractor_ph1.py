@@ -177,7 +177,7 @@ def xtractRules():
                 ruleDict[xR_rule] = 1.0
 #            print '%15s %15s : %g' % (xR_rule[0], xR_rule[1], ruleDict[xR_rule])
     for span_tuple in unAlignBoundDict:
-	if len(span_tuple[0]) <= TOT_TERMS:
+	if len(span_tuple[0].split()) <= TOT_TERMS:
 		if ruleDict.has_key(span_tuple):
         	        ruleDict[span_tuple] += 1.0
 	        else:
@@ -574,8 +574,8 @@ def main():
     global tightPhrases, tightRules
     tightPhrases = True
     tightRules = True
-    if len(sys.argv) < 4 and len(sys.argv) > 6:
-        print 'Usage: python %s <file_index> <dataDir> <outDir> [Total_terms on Fr side (def 7)] [1,2,3]' % (sys.argv[0])
+    if len(sys.argv) < 4 or len(sys.argv) > 7:
+        print 'Usage: python %s <file_index> <dataDir> <outDir> [Total_terms on Fr side (def 7)] [max nonterm] [1,2,3]' % (sys.argv[0])
         print 'Exiting!!\n'
         sys.exit()
 

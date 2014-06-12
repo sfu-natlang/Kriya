@@ -131,7 +131,6 @@ def readSentAlign(spanFile, outFile, tgtFile):
             resetStructs()
             del aTupLst[:]
             sent_count += 1
-            #print sent_count
             if sent_count % 1000 == 0:
                 print "Sentences processed : %6d ..." % sent_count
         else:
@@ -260,7 +259,7 @@ def xtractRules():
                 genRule4Phrase(sentInitDoD[tphr_len][phr_pair], phr_pair)
 
 def genRule4Phrase(phrPairStr, (src_tuple, tgt_tuple)):
-    global ruleDict, ruleDoD, rightTgtPhraseDict, ppairRulesSet, tgtPhraseDict, basePhrDict
+    global ruleDict, ruleDoD, rightTgtPhraseDict, ppairRulesSet, tgtPhraseDict, basePhrDict, max_non_term
     
     ruleDoD[tgt_tuple] = {}   
     ppairRulesSet = set()
@@ -286,10 +285,13 @@ def genRule4Phrase(phrPairStr, (src_tuple, tgt_tuple)):
         endP = rtgt_phr_span[1][0] - 1
 
     # distribute unit rule count among rules extracted from this phrase pair
-    ruleNo = len(ppairRulesSet)
-    if ruleNo == 0: 
-        return 
-    ruleCount = 1.0/float(ruleNo)
+    ruleNo = 0
+    for rule in ppairRulesSet:
+        max_x = findMaxNonTerm(rule[0])
+        if max_x <= max_non_term:
+            ruleNo += 1
+    if ruleNo == 0: ruleCount = 0
+    else:    ruleCount = 1.0/float(ruleNo)    
     for rule in ppairRulesSet:
         if rule[1].startswith("X__"):
             nonTermRuleDoD[tgt_tuple][rule] = 1
@@ -323,6 +325,15 @@ def checkRuleConfigure((src_phr, tgt_phr), isNonTerm=False):
     if max_x > max_non_term:  return False 
     if src_len - max_x > max_terms: return False
     if len(tgt_phr.split()) - max_x > max_terms+3: return False
+    pre_x = False
+    
+    #check adjacent non-terms on src
+    if src_phr.find("X__2") >= 0:
+        for w in src_phr.split():
+            if w.startswith("X__"):
+                if pre_x: return False
+                pre_x = True
+            else: pre_x = False
     return True
 
 def substituteRuleSet(main_rule_lst, sub_ppair_span, isNonTerm = None):
@@ -344,13 +355,16 @@ def substituteRuleSet(main_rule_lst, sub_ppair_span, isNonTerm = None):
         if not isNonTerm and max_x >= max_non_term:       # rule cannot have more non-terminal
             continue
     
-        left_bound_src = main_rule[0].find(sub_phr[0])                            # find boundaries subphrase on src side 
+        if main_rule[0].startswith(sub_phr[0]): left_bound_src = 0                            # happens at the begining of src side 
+        elif main_rule[0].find(" "+sub_phr[0]+" ") > 0: left_bound_src = main_rule[0].find(" "+sub_phr[0]+" ")+1  
+        else: left_bound_src = main_rule[0].find(" "+sub_phr[0])+1                              # find boundaries subphrase on src side 
         right_bound_src = left_bound_src + len(sub_phr[0])
-        left_bound_tgt = main_rule[1].find(sub_phr[1])                            # find boundaries subphrase on tgt side
+        if main_rule[1].startswith(sub_phr[1]): left_bound_tgt = 0
+        else:   left_bound_tgt = main_rule[1].find(" "+sub_phr[1])+1                            # find boundaries subphrase on tgt side
         right_bound_tgt = left_bound_tgt + len(sub_phr[1])
     
         # left and right part of main rule (for later rule construction)
-        right_src_main = main_rule[0][right_bound_src:].strip()                   
+        right_src_main = main_rule[0][right_bound_src:].strip()
         right_tgt_main = main_rule[1][right_bound_tgt:].strip()
         left_src_main = main_rule[0][:left_bound_src].strip()
         left_tgt_main = main_rule[1][:left_bound_tgt].strip()
@@ -447,7 +461,8 @@ def mergeNonTerms(rule, t_words, min_x, max_x):
     left_src = rule[0][:s].strip()
     # find the right and left part of tgt     
     s = rule[1].find(t_words[0])
-    e = rule[1].find(t_words[-1])+5
+    #e = rule[1].find(t_words[-1])+5
+    e = s+len(" ".join(t_words))
     right_tgt = rule[1][min(e, len(rule[1])):].strip()
     right_tgt = updateNonTerms(right_tgt, min_x-max_x, min_x)
     left_tgt = rule[1][:s].strip()

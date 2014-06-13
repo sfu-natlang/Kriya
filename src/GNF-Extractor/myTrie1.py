@@ -1,6 +1,7 @@
 # Implements a Suffix trie for faster searching of rules for a given span
 # in the given synchronous grammar
 
+
 __author__="bsa33"
 __date__ ="$Nov 12, 2009 3:20:39 PM$"
 

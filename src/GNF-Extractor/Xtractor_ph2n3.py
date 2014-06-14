@@ -11,9 +11,9 @@ import heapq
 import math
 import time
 from datetime import timedelta
-from myTrie1 import SimpleSuffixTree
+#from myTrie1 import SimpleSuffixTree
 #from extendedTrie import SimpleSuffixTree
-#from TrieMultNT import SimpleSuffixTree
+from TrieMultNT import SimpleSuffixTree
 
 MAX_PHR_LEN = 10
 TOT_TERMS = 5
@@ -139,6 +139,8 @@ def main():
     outDir = sys.argv[4]
     if len(sys.argv) == 6:
         TOT_TERMS = int(sys.argv[5])
+    if len(sys.argv) == 7:
+        MAX_PHR_LEN = int(sys.argv[6])
 
     if not inDir.endswith('/'): inDir += '/'
     if not outDir.endswith('/'): outDir += '/'

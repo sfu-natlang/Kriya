@@ -54,6 +54,7 @@ def processPhrases(inFile):
     global new_trie
     global phrDict
     global ruleDict
+    global MAX_SPAN_LEN
     phrDict = {}
 
     t_tot = 0.0
@@ -139,7 +140,7 @@ def getLogProb(prob_str, tgt_rule):
     return ' '.join( map( lambda x: '%6f' % x, featVec ) )
 
 def main():
-    global TOT_TERMS
+    global TOT_TERMS, MAX_SPAN_LEN
     file_indx = sys.argv[1]
 
     if file_indx == 'None':             # if file_indx is None; sent_file is directly specified
@@ -155,9 +156,9 @@ def main():
         sentFile = sent_dir + file_indx + '.out'
         filtFile = rule_dir + file_indx + '.out'
 
-    if len(sys.argv) == 6:
+    if len(sys.argv) >= 6:
         TOT_TERMS = int(sys.argv[5])
-    if len(sys.argv) == 7:
+    if len(sys.argv) >= 7:
         MAX_SPAN_LEN = int(sys.argv[6])
 
     loadTrie(ruleFile)

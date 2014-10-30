@@ -242,44 +242,55 @@ class ConsequentItem(object):
 
         for term in self.eTgtLst:
             if term == "X__1" or term == "S__1":
-                tgtItems.append( anteHyps[0] )
+                tgtItems.append(anteHyps[0])
                 tempLst = anteItems[0].eTgtLst
-                old_e_tgt = ' '.join(anteItems[0].eTgtLst)
+                old_e_tgt = ' '.join(tempLst)
                 next_state = anteItems[0].r_lm_state
             elif term == "X__2":
-                tgtItems.append( anteHyps[1] )
+                tgtItems.append(anteHyps[1])
                 tempLst = anteItems[1].eTgtLst
                 next_state = anteItems[1].r_lm_state
             else:
-                tgtItems.append( term )
+                tgtItems.append(term)
                 eTgtLstNew.append(term)
                 e_new_len += 1
                 continue
 
-            for ante_term in tempLst:
-                if ante_term == settings.opts.elider:
-                    if (e_new_len - mgram_beg >= lm_order \
-                            or curr_state is not None) and mgram_beg != e_new_len:
-                        self.phrStateTupLst.append( (' '.join( eTgtLstNew[mgram_beg:e_new_len] ), curr_state) )
-                    curr_state = next_state
-                    if settings.opts.no_lm_state: mgram_beg = e_new_len + 1
-                    else: mgram_beg = e_new_len + lm_order
-                eTgtLstNew.append(ante_term)
-                e_new_len += 1
+            eTgtLstNew.extend(tempLst)
+            mgram_beg, curr_state = self.handleEdges(lm_order, mgram_beg, e_new_len, curr_state, next_state, tempLst, eTgtLstNew)
+            e_new_len += len(tempLst)
 
-        if (e_new_len - mgram_beg >= lm_order \
-                or curr_state is not None) and mgram_beg != e_new_len:
+        self.elideNewTgt(old_e_tgt, lm_obj, lm_order, mgram_beg, e_new_len, curr_state, eTgtLstNew)
+        return ' '.join(tgtItems)
+
+    def elideNewTgt(self, old_e_tgt, lm_obj, lm_order, mgram_beg, e_new_len, curr_state, eTgtLstNew):
+        if mgram_beg != e_new_len and (curr_state is not None \
+                or e_new_len - mgram_beg >= lm_order):
             self.phrStateTupLst.append( (' '.join( eTgtLstNew[mgram_beg:e_new_len] ), curr_state) )
 
         # Finally elide the string again and compute the right LM state if required
-        if e_new_len >= lm_order:
+        if e_new_len < lm_order:
+            self.eTgtLst = eTgtLstNew
+        else:
             if self.r_lm_state is None and not settings.opts.no_lm_state:
                 self.r_lm_state = lm_obj.getLMState(' '.join( eTgtLstNew[-lm_order:] ))
             self.eTgtLst = eTgtLstNew[0:lm_order-1] + [lm_obj.elider] + eTgtLstNew[1-lm_order:]
-        else:
-            self.eTgtLst = eTgtLstNew
         self.e_len = len(self.eTgtLst)
         if old_e_tgt == ' '.join(self.eTgtLst):
             self.new_elided_tgt = False
 
-        return ' '.join(tgtItems)
+    def handleEdges(self, lm_order, mgram_beg, curr_e_len, curr_state, next_state, tempLst, eTgtLstNew):
+        for ante_term in tempLst:
+            if ante_term != settings.opts.elider:
+                curr_e_len += 1
+                continue
+            if (curr_e_len - mgram_beg >= lm_order \
+                    or curr_state is not None) and mgram_beg != curr_e_len:
+                self.phrStateTupLst.append( (' '.join( eTgtLstNew[mgram_beg:curr_e_len] ), curr_state) )
+            curr_state = next_state
+            if settings.opts.no_lm_state: mgram_beg = curr_e_len + 1
+            else: mgram_beg = curr_e_len + lm_order
+            break
+
+        return mgram_beg, curr_state
+

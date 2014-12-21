@@ -276,8 +276,8 @@ def loadConfig():
             elif parameter_line == "[weight_wd]": opts.weight_w = float(line)
             elif parameter_line == "[weight_hd]": opts.weight_h = float(line)
             elif parameter_line == "[distortion-limit]": 
-		opts.dist_limit = int(line)
-		if opts.dist_limit <= 0: opts.dist_limit = 10000
+                opts.dist_limit = int(line)
+                if opts.dist_limit <= 0: opts.dist_limit = 10000
             elif parameter_line == "[ttable-limit]": opts.ttl = int(line)
             elif parameter_line == "[glue-ttable-limit]": opts.ttlg = int(line)
             elif parameter_line == "[lmodel-file]":

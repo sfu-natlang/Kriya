@@ -306,13 +306,13 @@ class Cube(object):
 
         self.dimensions += 1
         self.ruleLst[len(self.ruleLst):] = [ rLst[:] ]
-	if self.setCube and self.dimensions == 2:
-		self.boundLst = []
-		prevTgt = None
-		for indx,ent_obj in enumerate(self.ruleLst[-1]):
-			if prevTgt!= ent_obj.tgt:
-				prevTgt = ent_obj.tgt
-				self.boundLst.append(indx)
+        if self.setCube and self.dimensions == 2:
+            self.boundLst = []
+            prevTgt = None
+            for indx,ent_obj in enumerate(self.ruleLst[-1]):
+                if prevTgt!= ent_obj.tgt:
+                    prevTgt = ent_obj.tgt
+                    self.boundLst.append(indx)
 				
     def getBestItem(self, cube_indx):
         '''Get the best item in the Cube and return its derivation'''
@@ -339,10 +339,10 @@ class Cube(object):
         if not self.trackCubeDict.has_key( tuple(r) ):
             print "Error: The indexVctor %s doesn't *exist* in self.trackCubeDict" % (tuple(r))
         elif self.trackCubeDict[tuple(r)] != 1 and self.cbp_heap_diversity > 1 :
-	    return neighbours
-	elif self.trackCubeDict[tuple(r)] != 1:
+            return neighbours
+        elif self.trackCubeDict[tuple(r)] != 1:
             print "Error: The value of indexVctor %s in self.trackCubeDict is %d (should be 1 instead)" % (tuple(r), self.trackCubeDict[tuple(r)])
-	    return neighbours
+            return neighbours
 
         dimension = -1
         for curr_indx in r:
@@ -381,12 +381,12 @@ class Cube(object):
         '''Get k additional items for increasing the diversity in the Cube'''
 
         neighbours = []
-	if self.setCube:
-	    indexVector = [0 for i in self.initDimVec]
-	    for bound in self.boundLst:
-	        indexVector[1] = bound
-		r = tuple(indexVector)
-        	if not self.trackCubeDict.has_key( r ):
+        if self.setCube:
+            indexVector = [0 for i in self.initDimVec]
+            for bound in self.boundLst:
+                indexVector[1] = bound
+                r = tuple(indexVector)
+                if not self.trackCubeDict.has_key( r ):
                     div_candTup = self.getItemForVect(cube_indx, indexVector)
                     neighbours.append(div_candTup)
                 if len(neighbours) >= min(k,5): break
@@ -472,26 +472,26 @@ class Cube(object):
         score_wo_LM = score - (Lazy.wvec_lm * fVec[6])	##TODO: make sure that the lm value in featVec of rules is zero!!
 	#### Sanity check:
         if abs(score_wo_LM - (entriesLst[0].getScoreSansLM(Lazy.wvec_lm) +entriesLst[1].getScoreSansLM(Lazy.wvec_lm))) > 0.01:
-		print "Serious error: entries have different socre!!"
-		print entriesLst[0].getScoreSansLM(Lazy.wvec_lm), +entriesLst[1].getScoreSansLM(Lazy.wvec_lm), score_wo_LM
-		print
-		entriesLst[0].printIt()
-		entriesLst[1].printIt()
-		exit(1)
-	####
-	cover |= filled
-	cover = frozenset(cover)
-	preLMProb = fVec[6]
-	if settings.opts.hyp_sign == 0:
-		sign = (cons_item.tgt,cover)
-        	hyp_status = Lazy.getHypothesisStatus(sign, score_wo_LM)
-	else:
-	        (score, lm_heu, lm_lprob, e_tgt, out_state) = self.helperLM(score, cons_item, preLMProb)
-        	fVec[6] += lm_lprob
-		score_for_check_hyp_stat = score
-		if settings.opts.hyp_sign == 1: sign = (e_tgt,cover)
-		if settings.opts.hyp_sign == 2: sign = (e_tgt, tuple(tmpSpanLst))
-        	hyp_status = Lazy.getHypothesisStatus(sign, score)
+            print "Serious error: entries have different socre!!"
+            print entriesLst[0].getScoreSansLM(Lazy.wvec_lm), +entriesLst[1].getScoreSansLM(Lazy.wvec_lm), score_wo_LM
+            print
+            entriesLst[0].printIt()
+            entriesLst[1].printIt()
+            exit(1)
+        ####
+        cover |= filled
+        cover = frozenset(cover)
+        preLMProb = fVec[6]
+        if settings.opts.hyp_sign == 0:
+            sign = (cons_item.tgt,cover)
+            hyp_status = Lazy.getHypothesisStatus(sign, score_wo_LM)
+        else:
+            (score, lm_heu, lm_lprob, e_tgt, out_state) = self.helperLM(score, cons_item, preLMProb)
+            fVec[6] += lm_lprob
+            score_for_check_hyp_stat = score
+            if settings.opts.hyp_sign == 1: sign = (e_tgt,cover)
+            if settings.opts.hyp_sign == 2: sign = (e_tgt, tuple(tmpSpanLst))
+            hyp_status = Lazy.getHypothesisStatus(sign, score)
 
         """ Should we recombine hypothesis?
             A new hypothesis is always added; query LM for lm-score and create new entry_obj.
@@ -501,20 +501,20 @@ class Cube(object):
         """
         if ( hyp_status == -2 ):
             if settings.opts.hyp_sign == 0:
-            	(score, lm_heu, lm_lprob, e_tgt, out_state) = self.helperLM(score, cons_item, preLMProb)
-            	fVec[6] += lm_lprob
+                (score, lm_heu, lm_lprob, e_tgt, out_state) = self.helperLM(score, cons_item, preLMProb)
+                fVec[6] += lm_lprob
             entry_obj = Entry(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[1], entriesLst[:], 0.0, out_state)
-	    entry_obj.setCoverage(entriesLst[1].unc_spans, entriesLst[0])
-	    score = entry_obj.score + entry_obj.fc
+            entry_obj.setCoverage(entriesLst[1].unc_spans, entriesLst[0])
+            score = entry_obj.score + entry_obj.fc
         elif ( hyp_status == 0 and settings.opts.use_unique_nbest ):
             entry_obj = None
         else:
-	    if settings.opts.hyp_sign == 0: entry_obj = Entry(score, 0, self.src_side, cons_item.tgt, fVec, '', self.depth_hier, (), entriesLst[1], entriesLst[:])
-	    else: entry_obj = Entry(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[1], entriesLst[:], 0.0, out_state)
-	    entry_obj.setCoverage(entriesLst[1].unc_spans, entriesLst[0])
-	    score = entry_obj.score + entry_obj.fc
-	    #print "hypothesis status -1!!!!"
-	    #entry_obj.printIt()
+            if settings.opts.hyp_sign == 0: entry_obj = Entry(score, 0, self.src_side, cons_item.tgt, fVec, '', self.depth_hier, (), entriesLst[1], entriesLst[:])
+            else: entry_obj = Entry(score, lm_heu, self.src_side, cons_item.tgt, fVec, e_tgt, self.depth_hier, (), entriesLst[1], entriesLst[:], 0.0, out_state)
+            entry_obj.setCoverage(entriesLst[1].unc_spans, entriesLst[0])
+            score = entry_obj.score + entry_obj.fc
+            #print "hypothesis status -1!!!!"
+            #entry_obj.printIt()
         return (score, entry_obj)
 
     def helperLM(self, score, cons_item, preLMProb):
@@ -523,46 +523,46 @@ class Cube(object):
         lm_lprob = 0.0
         is_new_elided_tgt = True
         new_out_state = cons_item.r_lm_state
-	dummy_lmProb = 0
-	lm_heu = 0
-	if settings.opts.no_lm_score:   
-		dummy_len = min(cons_item.e_len, settings.opts.n_gram_size-1)
-		e_tgt = " ".join(cons_item.eTgtLst[cons_item.e_len-dummy_len:])
-		return (score, lm_heu, lm_lprob, e_tgt, new_out_state)
+        dummy_lmProb = 0
+        lm_heu = 0
+        if settings.opts.no_lm_score:   
+            dummy_len = min(cons_item.e_len, settings.opts.n_gram_size-1)
+            e_tgt = " ".join(cons_item.eTgtLst[cons_item.e_len-dummy_len:])
+            return (score, lm_heu, lm_lprob, e_tgt, new_out_state)
 
         # Computing n-gram LM-score for partial candidate hypotheses
         if cons_item.eTgtLst[0] == "<s>":
-	    dummy_len = min(cons_item.e_len, settings.opts.n_gram_size-1)
-	    dummy_tgtLst = cons_item.eTgtLst[:dummy_len]
+            dummy_len = min(cons_item.e_len, settings.opts.n_gram_size-1)
+            dummy_tgtLst = cons_item.eTgtLst[:dummy_len]
             if settings.opts.use_srilm: lm_H = SRILangModel.getLMHeuCost(dummy_tgtLst, dummy_len)	## SRILM does not work now, becareful!!
             else: lm_H = KENLangModel.queryLMShort(dummy_tgtLst, dummy_len)
-	    lm_lprob = (lm_H - preLMProb)
-	    dummy_lmProb = lm_lprob
+            lm_lprob = (lm_H - preLMProb)
+            dummy_lmProb = lm_lprob
             e_tgt = cons_item.e_tgt
         
         if cons_item.e_len < settings.opts.n_gram_size:
-	    if cons_item.eTgtLst[0] != "<s>":
-		sys.stderr.write("ERR: history is less than %d-gram, but it is not the start of sentence:\n%s\n%s" % (settings.opts.n_gram_size, cons_item.e_tgt, cons_item.tgt))
-		exit(1)
-	    lm_lprob = 0
+            if cons_item.eTgtLst[0] != "<s>":
+                sys.stderr.write("ERR: history is less than %d-gram, but it is not the start of sentence:\n%s\n%s" % (settings.opts.n_gram_size, cons_item.e_tgt, cons_item.tgt))
+                exit(1)
+            lm_lprob = 0
             # Compute the LM probabilities for all complete m-grams in the elided target string, and
             # Compute heuristic prob for first m-1 terms in target
-	else:
+        else:
             if settings.opts.use_srilm:
                 (lm_lprob, e_tgt) = SRILangModel.scorePhrnElide(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans)
                 #lm_H = SRILangModel.getLMHeuCost(cons_item.eTgtLst, cons_item.e_len)
             else:
-		#if cons_item.e_tgt in self.LMCache:
-		#	(lm_lprob, e_tgt, new_out_state) = self.LMCache[cons_item.e_tgt]
-		#else:
-                #	(lm_lprob, e_tgt, new_out_state) = KENLangModel.scorePhrnElideRight(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans, cons_item.statesLst, cons_item.r_lm_state)
-		#	self.LMCache[cons_item.e_tgt] = (lm_lprob, e_tgt, new_out_state)
+                #if cons_item.e_tgt in self.LMCache:
+                    #(lm_lprob, e_tgt, new_out_state) = self.LMCache[cons_item.e_tgt]
+                #else:
+                    #(lm_lprob, e_tgt, new_out_state) = KENLangModel.scorePhrnElideRight(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans, cons_item.statesLst, cons_item.r_lm_state)
+                    #self.LMCache[cons_item.e_tgt] = (lm_lprob, e_tgt, new_out_state)
                 (lm_lprob, e_tgt, new_out_state) = KENLangModel.scorePhrnElideRight(cons_item.eTgtLst, cons_item.e_len, cons_item.mgramSpans, cons_item.statesLst, cons_item.r_lm_state)
                 #lm_H = KENLangModel.getLMHeuCost(cons_item.e_tgt, cons_item.eTgtLst, cons_item.e_len)
             if e_tgt == cons_item.e_tgt: 
-		sys.stderr.write("ERR: history has not been changed!!:\n%s\n%s" % (cons_item.e_tgt, cons_item.tgt))
+                sys.stderr.write("ERR: history has not been changed!!:\n%s\n%s" % (cons_item.e_tgt, cons_item.tgt))
                 exit(1)
-		is_new_elided_tgt = False
+                is_new_elided_tgt = False
 
         #if ( Lazy.is_last_cell ):                           # lm_heu is added permanently in the last cell
         #    if is_new_elided_tgt: lm_lprob += lm_H
@@ -572,7 +572,7 @@ class Cube(object):
         lm_heu = 0
         #if is_new_elided_tgt:
         #    score += lm_heu + (Lazy.wvec_lm * lm_lprob)     # Pruning score including LM and heuristic
-	lm_lprob += dummy_lmProb		# start of sentence prob
+        lm_lprob += dummy_lmProb		# start of sentence prob
         score += (Lazy.wvec_lm * lm_lprob)     # Pruning score including LM
 
         return (score, lm_heu, lm_lprob, e_tgt, new_out_state)
@@ -653,7 +653,7 @@ class ConsequentItem(object):
 
     def mergeAntecedents(self, is_last_cell):
 
-	if not is_last_cell:	self.setLMState()
+        if not is_last_cell:	self.setLMState()
         self.e_len = 0
         self.statesLst = []
         self.mgramSpans = []
@@ -675,20 +675,20 @@ class ConsequentItem(object):
 #                self.eTgtLst.append(term)
 #                self.e_len += 1
 #                continue
-	tgtItems = [self.tgt]
-	self.eTgtLst = self.e_tgt.split()
-	self.e_len = len(self.eTgtLst)
-	tgtItems.append( self.anteItems[0][0] )
-	tempLst = self.anteItems[0][1].split()
-	next_state = self.anteItems[0][2]
+        tgtItems = [self.tgt]
+        self.eTgtLst = self.e_tgt.split()
+        self.e_len = len(self.eTgtLst)
+        tgtItems.append( self.anteItems[0][0] )
+        tempLst = self.anteItems[0][1].split()
+        next_state = self.anteItems[0][2]
 
-	if is_last_cell:
-		tgtItems.append("</s>")
-		tempLst.append("</s>")
-		if next_state is not None:
-			print "lm_state is not none!!!"
-			print tgtItems
-			print tempLst
+        if is_last_cell:
+            tgtItems.append("</s>")
+            tempLst.append("</s>")
+            if next_state is not None:
+                print "lm_state is not none!!!"
+                print tgtItems
+                print tempLst
 
         for ante_term in tempLst:
                 if ante_term == settings.opts.elider:

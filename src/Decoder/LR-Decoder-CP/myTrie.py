@@ -1,8 +1,12 @@
 # Implements a Suffix trie for faster searching of rules for a given span
 # in the given synchronous grammar
-
-__author__="bsa33"
-__date__ ="$Nov 12, 2009 3:20:39 PM$"
+#First version by:
+#__author__="bsa33"
+#__date__ ="$Nov 12, 2009 3:20:39 PM$"
+# modified for rules with more than two non-terminals and adjacent non-terminals
+# (it works for at most 4 non-terminals)
+#__author__="Maryam Siahbani"
+#__date__ ="$Nov 24, 2012"
 
 
 MAX_PHR_LEN = 5
@@ -45,7 +49,6 @@ class SimpleSuffixTree(AbstractSuffixTree):
 
     def __constructTree(self):
 
-        wordsLst = []
         wordsLst = self.__text.split()
         wordsLst.append("$$$")
 
@@ -64,9 +67,8 @@ class SimpleSuffixTree(AbstractSuffixTree):
 
         global pattern
         global matchLst       # List of matching strings to be returned
-        matchLst = []
+        del matchLst[:]
         pattern = in_pattern
-        wordsLst = []
         wordsLst = pattern.split()
         if len(wordsLst) == 0:
             print "Empty suffix- no valid suffix tree found for the input\n"
@@ -95,8 +97,7 @@ class SuffixTreeNode(object):
     def addSuffix(self, root_node, wordsLst, path_cnt):
         '''Add the given suffix in the tree: uses __search() and __insert()'''
 
-        wLst = []
-        for w in wordsLst: wLst.append(w)
+        wLst = wordsLst[:]
         (ptr, ins_at_node) = self.__search(root_node, wLst)
         return self.__insert(ins_at_node, ptr, wLst, path_cnt)
 
@@ -147,7 +148,7 @@ class SuffixTreeNode(object):
         nodesVisited.append( root_node )
         while nodesVisited:
             curr_node = nodesVisited.pop()
-            for child_label in curr_node.__childIndxDict.keys():
+            for child_label in curr_node.__childIndxDict.iterkeys():
                 if child_label == "$$$":
                     # @type child_label SuffixTreeNode
                     print "Path : ", child_label.label_path
@@ -164,7 +165,7 @@ class SuffixTreeNode(object):
 
         global MAX_PHR_LEN
         global dfsStack
-        dfsStack = []
+        del dfsStack[:]
         dfsStack.append( (root_node, 0, []) )
         patt_len = len(wLst)
 
@@ -176,43 +177,33 @@ class SuffixTreeNode(object):
             search_label = wLst[search_indx]
             curr_label = curr_node.getStrLabel()
             curr_node_depth = curr_node.getNodeDepth()
-            if curr_label[0:3] == "X__": prev_match = search_indx - curr_node_depth + 1    #Maryam
+            if curr_label[0:3] == "X__": prev_match = search_indx - curr_node_depth + 1
             else: prev_match = 0
 
             # a non-terminal X__1 or X__2 is found in the current node
-            if search_label != "$$$" and (curr_node.__childIndxDict.has_key("X__1") or curr_node.__childIndxDict.has_key("X__2") or curr_node.__childIndxDict.has_key("X__3")):   #TO-DO: it may have more than two non-terminal
+            if search_label != "$$$" and (curr_node.__childIndxDict.has_key("X__1") or curr_node.__childIndxDict.has_key("X__2") or curr_node.__childIndxDict.has_key("X__3") or curr_node.__childIndxDict.has_key("X__4")):   #TO-DO: it may have more than 4 non-terminal
 
                 # a nonterminal is the child of the current node
-                for child in ["X__1","X__2", "X__3"]:
-		    if not curr_node.__childIndxDict.has_key(child): continue	#TO-DO: it may have more than two non-terminal  Maryam
-                      
-                    spanIndxLst = sIndxLst[:]
-		    if curr_label[0:3] == 'X__':
-	                spanIndxLst.append( search_indx - 1)
-			
-	            spanIndxLst.append( search_indx )
-                    new_node = curr_node.__childIndxDict[child]
-                    new_search_indx = search_indx + 1
-                    self.__processNewNode( new_node, new_search_indx, patt_len, spanIndxLst )
+                spanIndxLst = sIndxLst[:]
+                if curr_label[0:3] == 'X__': spanIndxLst.append( search_indx - 1)
+                spanIndxLst.append( search_indx )
+                for child in ["X__1", "X__2", "X__3", "X__4"]:
+                    if not curr_node.__childIndxDict.has_key(child): continue	#TO-DO: it may have more than 4 non-terminal
+                    self.__processNewNode( curr_node.__childIndxDict[child], search_indx + 1, patt_len, spanIndxLst )
 
             # the word at the current position is found in the Trie
             if curr_node.__childIndxDict.has_key(search_label):
-                new_node = curr_node.__childIndxDict[search_label]
-                new_search_indx = search_indx + 1
-                spanIndxLst = []
-                for i in sIndxLst: spanIndxLst.append(i)
+                spanIndxLst = sIndxLst[:]
                 if prev_match > 0:
                     spanIndxLst.append( search_indx - 1 )
-                self.__processNewNode( new_node, new_search_indx, patt_len, spanIndxLst )
+                self.__processNewNode( curr_node.__childIndxDict[search_label], search_indx + 1, patt_len, spanIndxLst )
 
             # non-terminal X__? continues for the current position in the given pattern; or
             # also used when the word at the current position is not found in the Trie
             if prev_match > 0 and prev_match < MAX_PHR_LEN:
                 new_search_indx = search_indx + 1
-                spanIndxLst = []
-                for i in sIndxLst: spanIndxLst.append(i)
                 if new_search_indx < patt_len:
-                    self.__processNewNode( curr_node, new_search_indx, patt_len, spanIndxLst )
+                    self.__processNewNode( curr_node, new_search_indx, patt_len, sIndxLst[:] )
 
         return None
 

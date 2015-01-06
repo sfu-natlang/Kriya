@@ -225,29 +225,28 @@ class Cell(object):
 
     def addAllCands(self, entryLst):
 	for entry in entryLst:
-		self.fullTable.append(entry)
+	    self.fullTable.append(entry)
 	#self.sent_scored = True
 	self.sent_scored = False
 
     def sortAllCand(self):
 	if self.sent_scored: return
 	for entry in self.fullTable:
-		Entry.scoreCandidate(entry)
+	    Entry.scoreCandidate(entry)
 	self.fullTable.sort(key=operator.attrgetter("cand_score"), reverse=True)
 	self.sent_scored = True
 
     def groupCands(self):
 	if not self.sent_scored:
-		self.sortAllCand()
+	    self.sortAllCand()
 	keys = self.table.keys()
 	for key in keys:
-		del self.table[key]
+	    del self.table[key]
 	self.table = {}
         for item in self.fullTable:    
-               if len(item.unc_spans) > 0:      key = item.unc_spans[0][0]
-               else: key = ()
-               if key not in self.table:          self.table[key] = []
-               self.table[key].append(item)
+	    key = item.groupSign()
+	    if key not in self.table: self.table[key] = [item]
+	    else: self.table[key].append(item)
 	
     def calcCandScore(self, cell_type):
         '''Calculates the candidate scores for the entries given a left NT (for printNBest)'''
@@ -354,7 +353,7 @@ class Cell(object):
                         if (entry.depth_hier == nt_depth): entriesLst.append( entry )
                     return entriesLst
 
-    def getHyps(self, key, stackInfo):
+    def getHyps(self, key):
         '''Given the key, get the list of hypothesis with corresponding uncovered span'''
 	#hypLst = []
 	#for item in self.table[key]:
@@ -362,4 +361,11 @@ class Cell(object):
 	#	newItem = Entry.copyEntry(item, newItem, stackInfo)
 	#	hypLst.append(newItem)
 	#return hypLst
-	return self.table[key]
+	return self.table.get(key, [])
+    
+    def flush2Cell(self, tgtLst):
+	'''Flush the entries (dictionary entries/ candidate hypotheses) to the cell'''
+	
+	self.addAllCands(tgtLst)
+	self.sortAllCand()
+	self.groupCands()

@@ -6,11 +6,82 @@ import sys
 import time
 
 import settings
-from parse_CP import Parse
+from cell import Cell
+from lattice import Lattice
+from entry_CP import getInitHyp
+from lazyMerge_CP import Lazy
 from phraseTable import PhraseTable
 from lmKENLM import KENLangModel
 from lmSRILM import SRILangModel
 from refPhrases import RefPhrases
+
+def decode_CP(sent_indx, lattice_obj):
+    final_cell = False
+    # Phase-1: Initialization
+    chart = [Cell() for i in range(lattice_obj.sent_len+1)]
+    # Fill the initial stack (or chartDict) with null hypothesis 
+    p_i = 0
+    ## log
+    #print "\nFilling stack:", p_i
+    chart[0].flush2Cell([getInitHyp(lattice_obj.sent_len)])     # Flush the entries to the cell
+    ## log print hypotheses in this stack
+
+    # Phase-2: Filling the stacks
+    # Iterate through all stacks each corresponds to number of covered words (1,sent_len)
+    total_cubes = 0
+    total_groups = 0
+    for p_s in range(1, lattice_obj.sent_len+1):
+	## log
+	#print "\nFilling stack:", p_s
+	if ( p_s == lattice_obj.sent_len ):
+	    final_cell = True
+	cube_indx = 0
+	merge_obj = Lazy(sent_indx, p_s, final_cell)
+	for p_j in range(max(0, p_s - settings.opts.fr_rule_terms), p_s):
+	    p_l = p_s - p_j
+	    ## log
+	    #print "\nFilling stack:", p_s, "\tSpan length:", p_l
+	    for group_sign in chart[p_j].table:
+		unc_span = group_sign.first_span
+		lattice_obj.matchRule(unc_span)
+		hypsLst = chart[p_j].getHyps(group_sign) 
+		## log: print the group of hypotheses for span: unc_span
+		for src_rule in Lattice.ruleLookUpTable[unc_span].get(p_l, []):
+		    # set the source side rule and span for the current cube
+		    spanLst = Lattice.spanToRuleDict[unc_span][src_rule]
+		    Lazy.setSourceInfo( merge_obj, cube_indx, src_rule, unc_span, spanLst, 0)
+		    #print "new Cube:", cube_indx, src_rule, unc_span, spanLst
+		    # add the hypothesis list to the cube as its first dimension
+		    Lazy.add2Cube(merge_obj, cube_indx, hypsLst)
+		    # add the rule list to the cube as its second dimension
+		    Lazy.add2Cube(merge_obj, cube_indx, Lattice.ruleLookUpTable[unc_span][p_l][src_rule])
+		    ## add log information in the cube
+		    cube_indx += 1
+
+	total_cubes += cube_indx
+	tgtLst = Lazy.mergeProducts(merge_obj)
+	chart[p_s].flush2Cell(tgtLst)   # Flush the entries to the cell
+	merge_obj = ''  # Important: This clears the mem-obj and calls the garbage collector on Lazy()
+	total_groups += len(chart[p_s].table)
+	
+	## log 
+	#print "\n\n Stack:", p_s, "\tnew hyps:"
+	#for hyp in tgtLst:
+        #    print hyp.printPartialHyp()
+	#if settings.opts.force_decode:
+	#    if len(tgtLst) == 0:
+	#        sys.stderr.write("           INFO  :: Force decode mode: No matching candidate found for cell (0, %d).\n" % (p_s))
+	#print "stack:\t", p_s, " has ", cube_indx, ' cubes and ', len(chart[p_s].table), " groups"
+
+    #print "sent len:  ", self.sent_len, "\t\tavg cubes:  %1.3g\t\tavg groups:  %1.3g" % ((total_cubes*1.0)/self.sent_len, (total_groups*1.0)/self.sent_len )
+    if len(chart[p_s]) == 0:
+	if settings.opts.force_decode: sys.stderr.write("           INFO  :: Force decode mode: No matching candidate found.")
+	else:  sys.stderr.write("           INFO  :: Error in Decoding: No matching candidate found.")
+	return 0
+    chart[p_s].printNBest(None, sent_indx)       # Print the N-best derivations in the last cell
+    if settings.opts.trace_rules > 0:
+        chart[p_s].printTrace(self.sent)        # Prints the translation trace for the top-3 entries
+    return 1
 
 def readNParse(sent_count):
     '''Parse the sentences in the array'''
@@ -32,15 +103,9 @@ def readNParse(sent_count):
             continue
 
         parse_begin = time.time()
-        parse_obj = Parse(sent_count, sent, relaxed_decoding, refsLst)
+        lattice_obj = Lattice(sent_count, sent, relaxed_decoding)
         sys.stderr.write( "%3d Translating  :: %s\n" % (sent_count, sent) )
-        dec_status = parse_obj.parse()
-        if ( dec_status == 99 ):
-            parse_obj = ''
-            relaxed_decoding = True
-            parse_obj = Parse(sent_count, sent, relaxed_decoding, refsLst)
-            dec_status = parse_obj.parse()
-            relaxed_decoding = False
+        dec_status = decode_CP(sent_count, lattice_obj)
         parse_time = time.time() - parse_begin
 
         tot_time += parse_time
@@ -48,7 +113,7 @@ def readNParse(sent_count):
         sent_count += 1
         sent_indx += 1
         if settings.opts.force_decode: coverage_cnt += dec_status
-        parse_obj = ''
+	Lattice.clear()
 
     inF.close()
     sys.stderr.write( "Time taken for decoding the set      : %1.3g sec\n\n" % (tot_time) )

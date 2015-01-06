@@ -89,7 +89,7 @@ def args():
     # Default flags & thresholds
     #opts.fr_rule_terms = 7
     #opts.fr_grule_terms = 9 # added 
-    opts.max_span_size = 4  #added
+    opts.max_span_size = 3  #added
     opts.unkPhrPenalty = -100.0 #added
     opts.max_phr_len = 10
     opts.nbest_limit = 100

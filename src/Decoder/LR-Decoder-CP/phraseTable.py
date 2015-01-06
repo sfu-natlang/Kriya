@@ -6,14 +6,12 @@ import sys
 import time
 
 import settings
-from entry_CP import Entry
+from rule import Rule
 from myTrie import SimpleSuffixTree
 from glueTrie import SimpleSuffixTreeForGlue
 from lmKENLM import KENLangModel
 from lmSRILM import SRILangModel
 from refPhrases import RefPhrases
-import re
-from copy import deepcopy
 
 featVec = []
 
@@ -26,7 +24,7 @@ class PhraseTable(object):
     ruleDict = {}
     gruleDict = {}
     phrasePairs = {}
-    srcPhrases = []
+    terminalRules = {}
     __slots__ = "wVec", "ttl", "pp_val", "ttlg"
 
     def __init__(self, TOT_TERMS):
@@ -42,7 +40,7 @@ class PhraseTable(object):
 	reorder_wgts_str = "d:"+str(self.wVec.d)+" dg:"+str(self.wVec.dg)+" r:"+str(self.wVec.r)+" w:"+str(self.wVec.w)+" h:"+str(self.wVec.h)
         sys.stderr.write( "Weights are : [%s] %g %g %g %s\n" % (tm_wgts_str, self.wVec.wp, self.wVec.glue, self.wVec.lm, reorder_wgts_str) )
 
-        self.loadRules(TOT_TERMS)
+        self.loadRules(settings.opts.max_phr_len)
 	self.makeGlueRules(TOT_TERMS)
 
     def delPT(self):
@@ -72,7 +70,8 @@ class PhraseTable(object):
                 line = line.strip()
                 (src, tgt, probs) = line.split(' ||| ')[0:3]                       # For Kriya phrase table
 #                (src, tgt, f_align, r_align, probs) = line.split(' ||| ')     # For Moses phrase table
-
+		src = src.strip()
+		tgt = tgt.strip()
                 if settings.opts.force_decode and not PhraseTable.tgtMatchesRef(tgt): continue
                 if settings.opts.one_nt_decode and src.find('X__2') >= 0: continue
                 PhraseTable.tot_rule_pairs += 1
@@ -89,46 +88,33 @@ class PhraseTable(object):
                 if len(prev_src) > 0 and prev_src != src:
                     entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
                     PhraseTable.ruleDict[prev_src] = []
-                    if re.findall(r'X__[0-9]',prev_src) == []:
-                    	PhraseTable.srcPhrases.append(prev_src)
+		    ## store terminal rules to generate glue rules
+		    if prev_src.find("X__") < 0: PhraseTable.terminalRules[prev_src]=0
                     tgt_options = 0
                     for pt_item_obj in entriesLst:
                         entry_obj = pt_item_obj.entry_item
-                        tm4_score = (self.wVec.tm[0] * entry_obj.featVec[0]) + (self.wVec.tm[1] * entry_obj.featVec[1]) + \
-                                    (self.wVec.tm[2] * entry_obj.featVec[2]) + (self.wVec.tm[3] * entry_obj.featVec[3]) 
-                        p_score =   tm4_score + \
-                                    (self.wVec.tm[4] * entry_obj.featVec[4])+ (self.wVec.wp * entry_obj.featVec[5]) + \
-                                    (self.wVec.glue * entry_obj.featVec[7])
-                        lm_score = self.wVec.lm * self.getLMHeuScore(entry_obj.tgt)
-                        entry_obj.lm_heu = lm_score
-                        entry_obj.tm4_score = tm4_score
-                        entry_obj.score = p_score
+                        entry_obj.lm_heu = self.wVec.lm * self.getLMHeuScore(entry_obj.tgt)
+                        entry_obj.completeInfo()
                         PhraseTable.ruleDict[prev_src].append( entry_obj )
                         tgt_options += 1
                         if(self.ttl > 0 and tgt_options >= self.ttl): break
                     del entriesLst[:]
 
-                #entriesLst.append( PTableItem(featVec[2], Entry(0.0, 0.0, src, tgt, featVec, tgt)) )
-                entriesLst.append( PTableItem(featVec[0], Entry(0.0, 0.0, src, tgt, featVec, tgt)) )
+                #entriesLst.append( PTableItem(featVec[2], Rule(0.0, 0.0, src, tgt, featVec)) )
+                entriesLst.append( PTableItem(featVec[0], Rule(0.0, 0.0, src, tgt, featVec)) )
                 prev_src = src
 
             # Handle the last rule
             entriesLst.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
             PhraseTable.ruleDict[prev_src] = []
-            if re.findall(r'X__[0-9]',prev_src) == []:
-              	PhraseTable.srcPhrases.append(prev_src)
+	    ## store terminal rules to generate glue rules
+	    if prev_src.find("X__") < 0: PhraseTable.terminalRules[prev_src]=0
             tgt_options = 0
             for pt_item_obj in entriesLst:
                 entry_obj = pt_item_obj.entry_item
-                tm4_score = (self.wVec.tm[0] * entry_obj.featVec[0]) + (self.wVec.tm[1] * entry_obj.featVec[1]) + \
-                            (self.wVec.tm[2] * entry_obj.featVec[2]) + (self.wVec.tm[3] * entry_obj.featVec[3])
-                p_score = tm4_score + \
-                            (self.wVec.tm[4] * entry_obj.featVec[4])+ (self.wVec.wp * entry_obj.featVec[5]) + \
-                            (self.wVec.glue * entry_obj.featVec[7])
                 lm_score = self.wVec.lm * self.getLMHeuScore(entry_obj.tgt)
                 entry_obj.lm_heu = lm_score
-                entry_obj.tm4_score = tm4_score
-                entry_obj.score = p_score
+                entry_obj.completeInfo()
                 PhraseTable.ruleDict[prev_src].append( entry_obj )
                 tgt_options += 1
                 if(self.ttl > 0 and tgt_options >= self.ttl): break
@@ -155,11 +141,17 @@ class PhraseTable(object):
         featVec = [float(x) for x in probs.split()]                              # For using Kriya PT (for base-e log probs)
 
         # now add phrase penalty and word penalty to the featVec
-	term_count = sum([1 if w.find("X__") != 0 else 0 for w in tgt_rule.split()])
+	term_count=0
+	tgtReordering = 0
+	for w in tgt_rule.split():
+	    if not w.startswith("X__"):
+		term_count += 1 
+	    elif w!="X__"+str(term_count): tgtReordering = 1
         featVec += [self.pp_val, -term_count, 0, 0] 
 	fLen = len(featVec)
 	for i in range(len(settings.opts.U_lpTup[2]) - fLen):
-		featVec.append(0)
+            featVec.append(0)
+	featVec[10] = tgtReordering ## feature "r"
 
     def makeGlueRules(self, TOT_TERMS):  
         '''Loads the glue rules along with their feature values'''
@@ -171,102 +163,94 @@ class PhraseTable(object):
 	ppenalty = self.wVec.tm[4]*self.pp_val         
 
         try:
-            #for src in PhraseTable.srcPhrases:
+            #for src in PhraseTable.terminalRules:
             for src in PhraseTable.ruleDict:
-		    entriesLst = PhraseTable.ruleDict[src]
-		    nonTermNo = -1
-		    if src in PhraseTable.srcPhrases:
-			tgts = [' X__1', ' X__1', ' X__1 X__2', ' X__2 X__1']	
-			srcs = ['X__1 '+ src, src+' X__1', 'X__1 '+ src+' X__2']		      
-		    elif settings.opts.glue_type > 0:
-			nonTermNo = getLastNonTremNumber(src)
-			if nonTermNo < 0: continue
-			if nonTermNo == 0: 
-				#if src[:-5] in PhraseTable.srcPhrases: continue
-                                if settings.opts.glue_type == 1:
-				    tgts = ['']	
-				    srcs = [src]
-                                else:
-				    tgts = ['', ' X__3']	
-				    srcs = [src, src+' X__3']
+		entriesLst = PhraseTable.ruleDict[src]
+		nonTermNo = -1
+		if src in PhraseTable.terminalRules:
+		    tgts = [' X__1', ' X__1', ' X__1 X__2', ' X__2 X__1']	
+		    srcs = ['X__1 '+ src, src+' X__1', 'X__1 '+ src+' X__2']		      
+		elif settings.opts.glue_type > 0:
+		    nonTermNo = getLastNonTremNumber(src)
+		    if nonTermNo < 0: continue
+		    if nonTermNo == 0: 
+			if src[:-5] in PhraseTable.terminalRules: continue
+			if settings.opts.glue_type == 1:
+			    tgts = ['']	
+			    srcs = [src]
 			else:
-				tgts = [' X__'+str(nonTermNo+1)]	
-				srcs = [src+tgts[0]]
-                    else: continue
-		    
-		    for src_index,glue_src in enumerate(srcs): 
-			#if nonTermNo == 0 and src_index == 0: continue
-			#if nonTermNo > 0 and glue_src.endswith("X__2"): continue
-                	if settings.opts.one_nt_decode and glue_src.find('X__2') >= 0: continue
-			sortFlag = False
-                    	if PhraseTable.gruleDict.has_key(glue_src):
-				sortFlag = True
-			else:	uniq_src_rules += 1
-			tmpRuleLst =  []
-			tgt_pf = tgts[src_index] 
-                    
-			tgt_options = 0
-			for entry_obj in entriesLst:
-				if nonTermNo == 0 and src_index == 0 and entry_obj.tgt.split()[-1] != entry_obj.src.split()[-1]: continue
-				if nonTermNo == 0 and src_index == 1 and entry_obj.tgt.split()[-1] == entry_obj.src.split()[-1]: continue
-				PhraseTable.tot_rule_pairs += 1
-				glue_rule_pairs += 1
-				entry_objCpy = deepcopy(entry_obj)
-				tmpRuleLst.append( entry_objCpy )
-				tmpRuleLst[-1].tgt += tgt_pf
-				tmpRuleLst[-1].src = glue_src
-				tmpRuleLst[-1].tgt_elided += tgt_pf
-				tmpRuleLst[-1].featVec[settings.opts.glue_penalty] = 1
-				tmpRuleLst[-1].featVec[4] = 0
-				tmpRuleLst[-1].score += self.wVec.glue
-				tmpRuleLst[-1].score -= ppenalty
-				if src_index == 2:
-				    PhraseTable.tot_rule_pairs += 1  
-				    glue_rule_pairs += 1
-				    entry_objCpy = deepcopy(entry_obj)
-				    tmpRuleLst.append( entry_objCpy )
-				    tmpRuleLst[-1].tgt += tgts[src_index+1]
-				    tmpRuleLst[-1].src = glue_src
-				    tmpRuleLst[-1].tgt_elided += tgts[src_index+1]
-				    tmpRuleLst[-1].featVec[settings.opts.glue_penalty] = 1
-				    tmpRuleLst[-1].featVec[4] = 0
-				    tmpRuleLst[-1].score += self.wVec.glue
-				    tmpRuleLst[-1].score -= ppenalty
-				tgt_options += 1
-				if(tgt_options >= self.ttlg): 
-					tgt_options = 0
-					break
+			    tgts = ['', ' X__3']	
+			    srcs = [src, src+' X__3']
+		    else:
+			tgts = [' X__'+str(nonTermNo+1)]	
+			srcs = [src+tgts[0]]
+                else: continue
 
-			if len(tmpRuleLst) == 0:
-				continue
-			if sortFlag:
-				newEntries = []
-				tgtLst = []
-				for ruleLst in [PhraseTable.gruleDict[glue_src], tmpRuleLst]:
-				    for entry_obj in ruleLst:
-					try:
-						tgtInd = tgtLst.index(entry_obj.tgt)
-				    		glue_rule_pairs -= 1
-						PhraseTable.tot_rule_pairs -= 1
-						if newEntries[tgtInd].prob_e_f > entry_obj.featVec[0]: continue
-						newEntries[tgtInd] = PTableItem(entry_obj.featVec[0], entry_obj)
-						tgtLst[tgtInd] = entry_obj.tgt
-						continue
-					except:
-						pass
-                			newEntries.append( PTableItem(entry_obj.featVec[0], entry_obj) )
-					tgtLst.append(entry_obj.tgt)
-            			newEntries.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
-				PhraseTable.gruleDict[glue_src] = []
-				for entry_pair in newEntries:
-					PhraseTable.gruleDict[glue_src].append(entry_pair.entry_item)	    
+		for src_index,glue_src in enumerate(srcs): 
+		    #if nonTermNo == 0 and src_index == 0: continue
+		    #if nonTermNo > 0 and glue_src.endswith("X__2"): continue
+		    if settings.opts.one_nt_decode and glue_src.find('X__2') >= 0: continue
+		    sortFlag = False
+		    if glue_src in PhraseTable.gruleDict:
+			sortFlag = True
+			continue
+		    else:   uniq_src_rules += 1
+		    tmpRuleLst =  []
+		    tgt_pf = tgts[src_index] 
+		    
+		    tgt_options = 0
+		    for entry_obj in entriesLst:
+			if nonTermNo == 0 and src_index == 0 and entry_obj.tgt.split()[-1] != entry_obj.src.split()[-1]: continue  ## rules like: <A X2/A' X1> cannot be used as glue rule
+			if nonTermNo == 0 and src_index == 1 and entry_obj.tgt.split()[-1] == entry_obj.src.split()[-1]: continue  ## rules like: <A X2/A' X2> does not need X3
+			PhraseTable.tot_rule_pairs += 1
+			glue_rule_pairs += 1
+			featVec = entry_obj.featVec[:]
+			featVec[settings.opts.glue_penalty] = 1
+			featVec[4] = 0
+			#score = entry_obj.score + self.wVec.glue - ppenalty				
+			entry_objCpy = Rule(0, entry_obj.lm_heu, glue_src, entry_obj.tgt + tgt_pf, featVec)
+			entry_objCpy.completeInfo()
+			tmpRuleLst.append( entry_objCpy )
+			if src_index == 2:
+			    PhraseTable.tot_rule_pairs += 1  
+			    glue_rule_pairs += 1
+			    featVec = entry_objCpy.featVec[:]
+			    featVec[10] = 1                             ## it is a rule with reordered nonterminals: <X1 src X2/tgt X2 X1>
+			    entry_objCpy = Rule(0, entry_obj.lm_heu, glue_src, entry_obj.tgt + tgts[src_index+1], featVec)
+			    entry_objCpy.completeInfo()
+			    tmpRuleLst.append( entry_objCpy )
+			tgt_options += 1
+			if(tgt_options >= self.ttlg): 
+			    tgt_options = 0
+			    break
+		    if sortFlag:
+			newEntries = []
+			tgtLst = []
+			for ruleLst in [PhraseTable.gruleDict[glue_src], tmpRuleLst]:
+			    for entry_obj in ruleLst:
+				try:
+				    tgtInd = tgtLst.index(entry_obj.tgt)
+				    glue_rule_pairs -= 1
+				    PhraseTable.tot_rule_pairs -= 1
+				    if newEntries[tgtInd].prob_e_f > entry_obj.featVec[0]: continue
+				    newEntries[tgtInd] = PTableItem(entry_obj.featVec[0], entry_obj)
+				    tgtLst[tgtInd] = entry_obj.tgt
+				    continue
+				except:
+				    pass
+				newEntries.append( PTableItem(entry_obj.featVec[0], entry_obj) )
+				tgtLst.append(entry_obj.tgt)
+			newEntries.sort(key=operator.attrgetter("prob_e_f"), reverse=True)
+			PhraseTable.gruleDict[glue_src] = []
+			for entry_pair in newEntries:
+			    PhraseTable.gruleDict[glue_src].append(entry_pair.entry_item)	    
+		    else:		    
+			if PhraseTable.glue_trie is None:
+			    PhraseTable.glue_trie = SimpleSuffixTreeForGlue(glue_src,TOT_TERMS)
 			else:
-                    		if PhraseTable.glue_trie is None:
-                        		PhraseTable.glue_trie = SimpleSuffixTreeForGlue(glue_src,TOT_TERMS)
-				else:
-					if PhraseTable.gruleDict.has_key(glue_src): print "exist previously!!: ",glue_src
-	                        	PhraseTable.glue_trie.addText(glue_src)
-				PhraseTable.gruleDict[glue_src] = tmpRuleLst
+			    if glue_src in PhraseTable.gruleDict: print "exist previously!!: ",glue_src
+			    PhraseTable.glue_trie.addText(glue_src)
+			PhraseTable.gruleDict[glue_src] = tmpRuleLst
 				
 	finally:
 	    t_end = time.time()
@@ -314,7 +298,7 @@ class PhraseTable(object):
 	if settings.opts.no_lm_score: return 0.0
         tgtLx = tgt_rule[:]
         if tgt_rule.find("X__") > -1:
-        	tgtLx = tgt_rule[0:tgt_rule.find("X__")].strip()
+	    tgtLx = tgt_rule[0:tgt_rule.find("X__")].strip()
 
 	tgt_words = tgtLx.split()
         lmorder = settings.opts.n_gram_size
@@ -322,14 +306,14 @@ class PhraseTable(object):
 	tmp_phrase = ""
 	lm_H = 0.0
 	for i in range(len(tgt_words)):
-		if i == lmorder - 1 : break
-		tmp_phrase = " ".join(tgt_words[0:i+1])
-	        if settings.opts.use_srilm: lm_H += SRILangModel.queryLM(tgt_words[0:i+1], i+1)  # for SRILM wrapper
-        	else: lm_H += KENLangModel.queryLM(tmp_phrase, i+1)  # for KENLM wrapper 
+	    if i == lmorder - 1 : break
+	    tmp_phrase = " ".join(tgt_words[0:i+1])
+	    if settings.opts.use_srilm: lm_H += SRILangModel.queryLM(tgt_words[0:i+1], i+1)  # for SRILM wrapper
+	    else: lm_H += KENLangModel.queryLM(tmp_phrase, i+1)  # for KENLM wrapper 
 		
 	if len(tgt_words) >= lmorder:
-	        if settings.opts.use_srilm: lm_H += SRILangModel.queryLM(tgt_words, len(tgt_words))  # for SRILM wrapper
-        	else: lm_H += KENLangModel.queryLM(tgtLx, len(tgt_words))  # for KENLM wrapper 
+	    if settings.opts.use_srilm: lm_H += SRILangModel.queryLM(tgt_words, len(tgt_words))  # for SRILM wrapper
+	    else: lm_H += KENLangModel.queryLM(tgtLx, len(tgt_words))  # for KENLM wrapper 
  
         #lmorder = settings.opts.n_gram_size if len(tgt_words) >= settings.opts.n_gram_size else len(tgt_words)
 	#lm_H = 0.0
@@ -365,63 +349,94 @@ class PhraseTable(object):
     def hasRule(cls, src_phr):
         '''Helper function for checking whether rules are found for a given source rule'''
 
-        return cls.ruleDict.has_key(src_phr)
+        return src_phr in cls.ruleDict
 
     @classmethod
     def hasgRule(cls, src_phr):
-        '''Helper function for checking whether rules are found for a given source rule'''
+        '''Helper function for checking whether glue rules are found for a given source rule'''
 
-        return cls.gruleDict.has_key(src_phr)
+        return src_phr in cls.gruleDict
 
     @classmethod
     def getRuleEntries(cls, src_phr, sent_indx):
         '''Helper function for returning the rule entries for a given source rule'''
 
+	## log
         #print "Total entries in ruleDict : ", len( cls.ruleDict[src_phr] )
-        #if settings.opts.force_decode:
-        if False:
-            tgtLst = []
-            for tgt_entry in cls.ruleDict[src_phr]:
+        if False: #settings.opts.force_decode:
+            ruleLst = []
+            for tgt_entry in cls.ruleDict.get(src_phr, []):
                 if cls.tgtMatchesRefSent(tgt_entry.tgt, sent_indx):
-                    tgtLst.append( tgt_entry )
-            return tgtLst
+                    ruleLst.append( tgt_entry )
+	    gruleLst = []
+	    for tgt_entry in cls.gruleDict.get(src_phr, []):
+		if cls.tgtMatchesRefSent(tgt_entry.tgt, sent_indx):
+		    gruleLst.append( tgt_entry )	    
+            return ruleLst, gruleLst
         else:
-            return cls.ruleDict[src_phr]
-          
-    @classmethod
-    def getgRuleEntries(cls, src_phr):
-        '''Helper function for returning the rule entries for a given source rule'''
-
-        #print "Total entries in ruleDict : ", len( cls.ruleDict.keys() )
-        return cls.gruleDict[src_phr]
+            return cls.ruleDict.get(src_phr, []), cls.gruleDict.get(src_phr, [])
 
     @classmethod
     def addUNKRule(cls, src_phr, entries):
-	if not PhraseTable.ruleDict.has_key(src_phr) and (not PhraseTable.gruleDict.has_key(src_phr)):
+	if src_phr not in PhraseTable.ruleDict and src_phr not in PhraseTable.gruleDict:
 	    PhraseTable.src_trie.addText(src_phr)
-	if not PhraseTable.ruleDict.has_key(src_phr):
+	if src_phr not in PhraseTable.ruleDict:
             cls.ruleDict[src_phr] = []
 	cls.ruleDict[src_phr] += entries
 
     @classmethod
     def addUNKGRule(cls, src_phr, entries):
-	if not PhraseTable.ruleDict.has_key(src_phr) and (not PhraseTable.gruleDict.has_key(src_phr)):
+	if src_phr not in PhraseTable.ruleDict and src_phr not in PhraseTable.gruleDict:
 	    PhraseTable.glue_trie.addText(src_phr)	
-	if not PhraseTable.gruleDict.has_key(src_phr):
+	if src_phr not in PhraseTable.gruleDict:
             cls.gruleDict[src_phr] = []
         cls.gruleDict[src_phr] += entries
+	
     @classmethod
-    def findConsistentRules(cls, src_span):
+    def findConsistentRules(cls, src_span, isGlue=False):
+	if isGlue: return SimpleSuffixTreeForGlue.matchPattern(cls.glue_trie, src_span)
         return SimpleSuffixTree.matchPattern(cls.src_trie, src_span)
-
-    @classmethod
-    def findConsistentGlueRules(cls, src_span):
-        return SimpleSuffixTreeForGlue.matchPattern(cls.glue_trie, src_span)
 
     @classmethod
     def getTotalRules(cls):
         return cls.tot_rule_pairs
+    
+    @classmethod
+    def createUNKRule(cls, src_phr):
+	featVec = settings.opts.U_lpTup[2][:]
+	featVec[settings.opts.lm_index] = 0
+	lm_score = settings.feat.lm * cls.getLMHeuScore(src_phr)
+	featVec[settings.opts.word_penalty] = -len(src_phr.split())
+	
+        rule_obj = Rule(0, lm_score, src_phr, src_phr, featVec, src_phr)
+	rule_obj.completeInfo()
+	
+	cls.addUNKRule(src_phr, [rule_obj])
 
+	feat_Vec = featVec[:]
+	featVec[settings.opts.glue_penalty] = 1
+	featVec[4] = 0 ##it is a glue rule not regular rule
+	
+	tgts = [' X__1', ' X__1', ' X__1 X__2', ' X__2 X__1']
+	srcs = ['X__1 '+ src_phr, src_phr+' X__1', 'X__1 '+ src_phr+' X__2']
+    
+	for index, src in enumerate(srcs):
+	    gEntries = []
+	    rEntries = []
+	    tgt = src_phr+tgts[index]
+	    gEntries.append( Rule(0, lm_score, src, tgt, featVec))
+	    gEntries[-1].completeInfo()
+	    rEntries.append( Rule(0, lm_score, src, tgt, feat_Vec))
+	    rEntries[-1].completeInfo()
+	    if index == 2:
+		tgt = src_phr+tgts[index+1]
+		gEntries.append( Rule(0, lm_score, src, tgt, featVec))
+		gEntries[-1].completeInfo()
+		rEntries.append( Rule(0, lm_score, src, tgt, feat_Vec))
+		rEntries[-1].completeInfo()
+	    cls.addUNKGRule(src, gEntries)
+	    cls.addUNKRule(src, rEntries)
+	return rule_obj
 
 class PTableItem(object):
     '''Phrase table item class for temporarily handling  SCFG rules and serving associated queries'''
@@ -434,15 +449,15 @@ class PTableItem(object):
 
 
 def getLastNonTremNumber(src):
-        ''' if last term is a non-terminal    : 0
-            if no non-term                    : -1
-            otherwise                         : bigest nonterminal'''
-	src_w = src.split()
-	#if len(src_w) == settings.opts.max_span_size: return -1
-	if src_w[-1].startswith("X__"): 
-		return 0
-	bigestNonTerm = -1
-	for w in src_w:
-		if w.startswith("X__"):
-			bigestNonTerm = int(w[3:])
-	return bigestNonTerm
+    ''' if last term is a non-terminal    : 0
+        if no non-term                    : -1
+        otherwise                         : bigest nonterminal'''
+    src_w = src.split()
+    #if len(src_w) == settings.opts.max_span_size: return -1
+    if src_w[-1].startswith("X__"): 
+	return 0
+    bigestNonTerm = -1
+    for w in src_w:
+	if w.startswith("X__"):
+	    bigestNonTerm = int(w[3:])
+    return bigestNonTerm

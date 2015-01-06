@@ -4,7 +4,7 @@
 #__author__="bsa33"
 #__date__ ="$Nov 12, 2009 3:20:39 PM$"
 # modified for rules with more than two non-terminals and adjacent non-terminals
-# (it works for at most 4 non-terminals)
+# (it works for at most 3 non-terminals)
 #__author__="Maryam Siahbani"
 #__date__ ="$Nov 24, 2012"
 
@@ -181,14 +181,14 @@ class SuffixTreeNode(object):
             else: prev_match = 0
 
             # a non-terminal X__1 or X__2 is found in the current node
-            if search_label != "$$$" and (curr_node.__childIndxDict.has_key("X__1") or curr_node.__childIndxDict.has_key("X__2") or curr_node.__childIndxDict.has_key("X__3") or curr_node.__childIndxDict.has_key("X__4")):   #TO-DO: it may have more than 4 non-terminal
+            if search_label != "$$$" and (curr_node.__childIndxDict.has_key("X__1") or curr_node.__childIndxDict.has_key("X__2") or curr_node.__childIndxDict.has_key("X__3")):   #TO-DO: it may have more than two non-terminal
 
                 # a nonterminal is the child of the current node
                 spanIndxLst = sIndxLst[:]
                 if curr_label[0:3] == 'X__': spanIndxLst.append( search_indx - 1)
                 spanIndxLst.append( search_indx )
-                for child in ["X__1", "X__2", "X__3", "X__4"]:
-                    if not curr_node.__childIndxDict.has_key(child): continue	#TO-DO: it may have more than 4 non-terminal
+                for child in ["X__1", "X__2", "X__3"]:
+                    if not curr_node.__childIndxDict.has_key(child): continue	#TO-DO: it may have more than two non-terminal
                     self.__processNewNode( curr_node.__childIndxDict[child], search_indx + 1, patt_len, spanIndxLst )
 
             # the word at the current position is found in the Trie
